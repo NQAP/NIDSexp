@@ -1,7 +1,6 @@
 import pandas as pd
 import argparse
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-# from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import json
 
 def preprocessing(file):
@@ -31,8 +30,13 @@ def preprocessing(file):
     label encoding
     """
 
-    # 找出所有 object 型別欄位
-    categorical_cols = df.select_dtypes(include=["object"]).columns
+    target_column = "attack_cat"
+
+    X = df.drop(columns=[target_column])
+    Y = df[target_column]
+
+    # 找出所有 object 型別 feature
+    categorical_cols = X.select_dtypes(include=["object"]).columns
 
     # 建立 dict 保存每個欄位的對應關係
     encoding_maps = {}
@@ -45,34 +49,34 @@ def preprocessing(file):
         print(f"\n欄位 {col} 的對應關係： {encoding_maps[col]}")
 
     # 將轉換後的資料存成新的 csv 檔案
-    df.to_csv("./extra_dataset/encoded.csv", index=False, encoding="utf-8-sig")
+    # df.to_csv("./extra_dataset/encoded.csv", index=False, encoding="utf-8-sig")
 
     # 儲存對應關係到 JSON 檔
-    with open("./extra_dataset/label_encodings.json", "w", encoding="utf-8") as f:
-        json.dump(encoding_maps, f, ensure_ascii=False, indent=4)
+    # with open("./extra_dataset/label_encodings.json", "w", encoding="utf-8") as f:
+    #     json.dump(encoding_maps, f, ensure_ascii=False, indent=4)
 
-    print("\n✅ 已將 Label Encoding 對應關係儲存到 label_encodings.json")
+    # print("\n✅ 已將 Label Encoding 對應關係儲存到 label_encodings.json")
 
-    target_column = "attack_cat"
-    X = df.drop(columns=[target_column])
-    Y = df[target_column]
+    """
+    Min Max scaling for non original numeric feature
+    """
+    scaler = MinMaxScaler(feature_range=(0,1)).fit(df[categorical_cols])
+    df[categorical_cols] = scaler.fit_transform(df[categorical_cols])
 
     """
     Clamping extreme value
     """
 
     # 迴圈每個欄位
-    for col in X.columns:
-        if pd.api.types.is_numeric_dtype(X[col]):
-            X[col] = X[col].astype(float)
-            median = X[col].median()
-            percentile_95 = X[col].quantile(0.95)
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            df[col] = df[col].astype(float)
+            median = df[col].median()
+            percentile_95 = df[col].quantile(0.95)
             
             # 使用向量化處理替換值
-            mask = (X[col] > 10 * median) | (X[col] > percentile_95)
-            X.loc[mask, col] = percentile_95
-
-    
+            mask = (df[col] > 10 * median) | (df[col] > percentile_95)
+            df.loc[mask, col] = percentile_95
 
     """
     Find majority and minority class
@@ -97,9 +101,6 @@ def preprocessing(file):
 
     df_majority = df[df[filter_column].isin(Major_class)]
     df_minority = df[df[filter_column].isin(Minor_class)]
-
-    df_majority.to_csv("./extra_dataset/encoded_majority_class.csv", index=False, encoding="utf-8-sig")
-    df_minority.to_csv("./extra_dataset/encoded_minority_class.csv", index=False, encoding="utf-8-sig")
 
     print(df_majority[target_column].value_counts())
     print(df_minority[target_column].value_counts())
