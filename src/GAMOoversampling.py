@@ -20,45 +20,39 @@ def conditional_feature_mapping_unit(z=32, c=8):
     # Dense -> 32
     x = layers.Dense(32)(combined)   # (batch, 32)
 
-    # === Attention over feature dimension ===
-    # reshape 成 (batch, seq_len=32, 1)
-    x_reshaped = layers.Reshape((32, 1))(x)
+    # Attention Layer
+    query = layers.Dense(32)(x)
+    key   = layers.Dense(32)(x)
+    value = layers.Dense(32)(x)
 
-    # 計算 attention 權重 (softmax over features)
-    attn_weights = layers.Dense(1, activation="softmax")(x_reshaped)  # (batch, 32, 1)
+    attn_score = layers.Dot(axes=-1)([query, key])
+    attn_score = layers.Softmax()(attn_score)
+    attn_out   = layers.Multiply()([attn_score, value])
 
-    # 加權求和
-    x = layers.Multiply()([x_reshaped, attn_weights])
-    x = layers.Flatten()(x)   # 回到 (batch, 32)
-
-    # Dense -> 64 + ReLU + BN
-    x = layers.Dense(64, activation="relu")(x)
-    x = layers.BatchNormalization()(x)
-
-    # Dense -> 32 + ReLU + BN
+    # Dense 64 + ReLU
+    x = layers.Dense(64, activation="relu")(attn_out)
+    # Dense 32 + ReLU
     x = layers.Dense(32, activation="relu")(x)
-    x = layers.BatchNormalization()(x)
 
-    return models.Model(inputs=[r_input, l_input], outputs=x, name="ConditionalFeatureMappingUnit")
+    return models.Model(inputs=[r_input, l_input], output=x, name="CFMU")
 
 # === 自定義 SGU ===
 def SGU_unit_custom(input_dim=32, orig_dim=42, numMinor=100, name="SGU"):
     cfmu_input = layers.Input(shape=(input_dim,), name=f"{name}_cfmu_input")
     original_input = layers.Input(shape=(orig_dim,), name=f"{name}_original_input")
     
-    combined = layers.Concatenate()([cfmu_input, original_input])   # (batch, z+c)
-    print(combined.shape)
-    # Dense 32 + Softmax
-    x = layers.Dense(32, activation="softmax")(combined)
-    
-    # Attention Layer 32
-    x_reshaped = layers.Reshape((32,1))(x)
-    attn_weights = layers.Dense(1, activation="softmax")(x_reshaped)
-    x = layers.Multiply()([x_reshaped, attn_weights])
-    x = layers.Flatten()(x)
+    query = layers.Dense(32)(original_input)
+    key = layers.Dense(32)(cfmu_input)
+    value = layers.Dense(32)(cfmu_input)
+
+    attn_score = layers.Dot(axes=-1)([query, key])
+    attn_score = layers.Softmax()(attn_score)
+    attn_out   = layers.Multiply()([attn_score, value])
+
+    h = layers.Dense(32, activation="softmax")(attn_out)
     
     # Dense numMinor
-    x = layers.Dense(numMinor)(x)
+    x = layers.Dense(numMinor)(h)
     print(x.shape)
     # RepeatVector Layer
     x = layers.RepeatVector(orig_dim)(x)  # shape -> (orig_dim, numMinor)

@@ -38,32 +38,30 @@ def build_cfm_unit(z_dim=32, num_classes=8):
 # =====================
 # Sample Generation Unit (SGU)
 # =====================
-def build_sgu(output_dim=42, num_samples=1000):
-    fake_input = Input(shape=(32,))
-    real_input = Input(shape=(output_dim,))
+def build_sgu(input_dim=32, orig_dim=42, numMinor=100, name="SGU"):
+    cfmu_input = layers.Input(shape=(input_dim,), name=f"{name}_cfmu_input")
+    original_input = layers.Input(shape=(orig_dim,), name=f"{name}_original_input")
+    
+    query = layers.Dense(32)(original_input)
+    key = layers.Dense(32)(cfmu_input)
+    value = layers.Dense(32)(cfmu_input)
 
-    x = layers.Concatenate()([fake_input, real_input])
+    attn_score = layers.Dot(axes=-1)([query, key])
+    attn_score = layers.Softmax()(attn_score)
+    attn_out   = layers.Multiply()([attn_score, value])
 
-    x = layers.Dense(32, activation="softmax")(x)
-
-    # Attention block
-    q = layers.Dense(32)(x)
-    k = layers.Dense(32)(x)
-    v = layers.Dense(32)(x)
-
-    q = layers.Reshape((1, 32))(q)
-    k = layers.Reshape((1, 32))(k)
-    v = layers.Reshape((1, 32))(v)
-
-    attn_out = layers.Attention()([q, v, k])
-    x = layers.Flatten()(attn_out)
-
-    # Dense -> Repeat -> Lambda
-    x = layers.Dense(num_samples)(x)
-    x = layers.RepeatVector(output_dim)(x)  # (output_dim, num_samples)
-    x = layers.Lambda(lambda t: tf.reduce_mean(t, axis=-1))(x)  # (output_dim,)
-
-    return models.Model([fake_input, real_input], x, name=f"SGU_{num_samples}")
+    h = layers.Dense(32, activation="softmax")(attn_out)
+    
+    # Dense numMinor
+    x = layers.Dense(numMinor)(h)
+    print(x.shape)
+    # RepeatVector Layer
+    x = layers.RepeatVector(orig_dim)(x)  # shape -> (orig_dim, numMinor)
+    
+    # Lambda: reduce mean -> shape = orig_dim
+    x = layers.Lambda(lambda t: tf.reduce_mean(t, axis=1), output_shape=(None, 42))(x)
+    
+    return models.Model(inputs=[cfmu_input, original_input], outputs=x, name=name)
 
 
 # =====================
@@ -79,7 +77,7 @@ class Generator:
         with tf.device(device):
             self.cfm = build_cfm_unit(z_dim, num_classes)
             self.sgu_list = [
-                build_sgu(output_dim=output_dim, num_samples=n)
+                build_sgu(orig_dim=output_dim, numMinor=n)
                 for n in self.samples_per_class
             ]
 
