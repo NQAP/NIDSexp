@@ -2,4 +2,4 @@
 
 目前進度：Gamo, FCM complete
 
-Dataset 已經整理完畢，可以開始進行SIDS及AIDS
+Dataset 已經oversampling，可以開始進行feature selection (GWO)
