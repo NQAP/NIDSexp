@@ -102,6 +102,13 @@ def preprocessing(file):
     df_majority = df[df[filter_column].isin(Major_class)]
     df_minority = df[df[filter_column].isin(Minor_class)]
 
+    # 輸出
+    df_majority.to_csv("./extra_dataset/majority_class.csv", index=False, encoding="utf-8-sig")
+    print(f"✅ 已輸出合併檔案: ./extra_dataset/majority_class.csv，共 {len(df_majority)} 筆資料")
+
+    df_minority.to_csv("./extra_dataset/minority_class.csv", index=False, encoding="utf-8-sig")
+    print(f"✅ 已輸出合併檔案: ./extra_dataset/minority_class.csv，共 {len(df_minority)} 筆資料")
+
     print(df_majority[target_column].value_counts())
     print(df_minority[target_column].value_counts())
 
