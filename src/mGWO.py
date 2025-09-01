@@ -7,8 +7,6 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 import json
-import cudf
-import cupy as cp
 
 # -----------------------------
 # 計算 fitness function
@@ -26,12 +24,6 @@ def compute_fitness(features, X, y, alpha=0.5):
     X_train, X_test, y_train, y_test = train_test_split(
         X_sub, y, test_size=0.2, random_state=42
     )
-
-    X_train_gpu = cudf.DataFrame.from_pandas(X_train)
-    y_train_gpu = cudf.Series(y_train)
-
-    X_test_gpu = cudf.DataFrame.from_pandas(X_test)
-    y_test_gpu = cudf.Series(y_test)
 
     # 使用 XGBoost 做分類
     model = XGBClassifier(eval_metric="mlogloss", device = "cuda")  # 重要：使用 GPU
@@ -234,8 +226,5 @@ if __name__ == "__main__":
     best_feature = mGWO(X, y, pop_size=20, max_iter=86)
 
     selected_idx = np.where(best_feature == 1)[0]
-
-    with open("./extra_dataset/best_feature.json", "w", encoding="utf-8") as f:
-        json.dump(selected_idx, f, ensure_ascii=False, indent=4)
 
     print("最佳特徵子集:", selected_idx)
