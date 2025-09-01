@@ -5,8 +5,8 @@ import skfuzzy as fuzz
 # -----------------------------
 # 1. 載入資料
 # -----------------------------
-df_majority = pd.read_csv("./extra_dataset/encoded_majority_class.csv")
-df_minority = pd.read_csv("./extra_dataset/encoded_minority_class.csv")  # 少數類
+df_majority = pd.read_csv("./extra_dataset/majority_class.csv")
+df_minority = pd.read_csv("./extra_dataset/minority_class.csv")  # 少數類
 target_column = "attack_cat"
 
 X = df_majority.drop(columns=target_column).values.T  # FCM 需要 shape = (features, samples)
@@ -27,6 +27,7 @@ def fcm_cluster(X, n_clusters, m):
 print ("cluster start!")
 cluster_labels, _ = fcm_cluster(X, n_clusters=166, m=1.013)
 df_majority["ClusterLabel"] = cluster_labels
+df_majority.to_csv("./extra_dataset/major_after_FCM.csv", index=False)
 print ("cluster done!")
 
 
@@ -67,7 +68,7 @@ for target_value, target_count in target_dict.items():
 # -----------------------------
 df_final = pd.concat(df_downsampled).reset_index(drop=True)
 df_final = df_final.drop(columns=["ClusterLabel"])
-df_final.to_csv("./extra_dataset/major_after_FCM.csv", index=False)
+df_final.to_csv("./extra_dataset/major_after_reduced.csv", index=False)
 
 # -----------------------------
 # 7. 檢視結果
