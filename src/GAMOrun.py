@@ -32,7 +32,7 @@ fileEnd, savePath='_Model.h5', fileStart+'/'
 latDim, modelSamplePd, resSamplePd=32, 500, 250
 plt.ion()
 
-batchSize, max_step=32, 500
+batchSize, max_step=32, 2
 
 trainS, labelTr=spp.fileRead(fileName[0])
 testS, labelTs=spp.fileRead(fileName[1])

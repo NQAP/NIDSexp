@@ -4,3 +4,4 @@ extra_dataset
 __pycache__
 *.zip
 UBSW_NB15_Gamo
+.vscode

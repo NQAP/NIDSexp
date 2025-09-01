@@ -4,29 +4,7 @@ import tensorflow as tf
 from keras.models import load_model, Model
 from keras.layers import Input, Dense, Softmax, Layer
 from keras.layers import BatchNormalization, Concatenate
-
-class SelfAttention(Layer):
-    def __init__(self, input_dim, **kwargs):
-        super(SelfAttention, self).__init__(**kwargs)
-        self.W_query = Dense(input_dim)
-        self.W_key = Dense(input_dim)
-        self.W_value = Dense(input_dim)
-        self.softmax = Softmax(axis=-1)
-    
-    def call(self, x):
-        query = self.W_query(x)
-        key = self.W_key(x)
-        value = self.W_value(x)
-        
-        attention_scores = tf.matmul(query, key, transpose_b=True) / tf.math.sqrt(tf.cast(x.shape[-1], tf.float32))
-        attention_weights = self.softmax(attention_scores)
-        out = tf.matmul(attention_weights, value)
-        return out + x  # 殘差連接
-    
-    def get_config(self):
-        config = super().get_config()
-        config.update({"units": self.units})
-        return config
+from dense_net import SelfAttention, GenProcessFinal
     
 def build_cfmu(noise_dim=32, label_dim=8):
     noise=Input(shape=(noise_dim,))
@@ -45,7 +23,7 @@ def build_cfmu(noise_dim=32, label_dim=8):
     gamoGen.summary()
     return Model([noise, labels], x, name="CFMU")
 
-def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_500/GenForClass_", gen_postfix="_500_Model"):
+def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_2/GenForClass_", gen_postfix="_2_Model"):
     """
     載入所有生成器和 cfmu_gen
     """
@@ -53,7 +31,7 @@ def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_500/GenFor
     for i in range(num_classes):
         model_path = f"{gen_prefix}{i}{gen_postfix}.h5"
         print(f"載入生成器: {model_path}")
-        gen.append(load_model(model_path, compile=False, custom_objects={"SelfAttention": SelfAttention}, safe_mode=False))
+        gen.append(load_model(model_path, compile=False, custom_objects={"SelfAttention": SelfAttention, "GenProcessFinal": GenProcessFinal}, safe_mode=False))
 
     return gen
 
@@ -73,7 +51,7 @@ def generate_samples_per_class(gen, cfmu_gen, num_samples, latDim, feature_dim, 
     return fakePoints, np.full((num_samples,), target_class)
 
 
-def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, c, label_mapping=None, save_path="./extra_dataset/generated_data.csv"):
+def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, save_path="./extra_dataset/generated_data.csv"):
     """
     批量生成所有類別的樣本，並存成 CSV
     num_gen_dict: dict 或 list，key=class id, value=生成數量
@@ -97,7 +75,13 @@ def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, c, la
     if label_mapping is not None:
         all_labels = np.vectorize(label_mapping.get)(all_labels)
 
-    df = pd.DataFrame(all_data, columns=[f"f{i}" for i in range(feature_dim)])
+    # 如果有提供 feature_names，就用它，否則 fallback 到 f0 ~ fN
+    if feature_names is None:
+        feature_names = [f"f{i}" for i in range(feature_dim)]
+
+    df = pd.DataFrame(all_data, columns=feature_names)
+
+    df = pd.DataFrame(all_data, columns=feature_names)
     df["label"] = all_labels
     df.to_csv(save_path, index=False, encoding="utf-8-sig")
     print(f"✅ 生成完成，存成 {save_path}，共 {df.shape[0]} 筆樣本")
@@ -107,6 +91,8 @@ def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, c, la
 if __name__ == "__main__":
 
     # 參數
+
+    df_orig = pd.read_csv("./extra_dataset/df_minority_train.csv")
 
     chi_m = 33393
 
@@ -126,14 +112,24 @@ if __name__ == "__main__":
     c = 8  # 類別數
     latDim = 32
     feature_dim = 42
+    # num_gen_dict = {
+    #     0: 33263,
+    #     1: 32260,
+    #     2: 31647,
+    #     3: 31393,
+    #     4: 22902,
+    #     5: 21129,
+    #     6: 15209,
+    #     7: 0
+    # }
     num_gen_dict = {
-        0: 33263,
-        1: 32260,
-        2: 31647,
-        3: 31393,
-        4: 22902,
-        5: 21129,
-        6: 15209,
+        0: 1,
+        1: 3,
+        2: 3,
+        3: 3,
+        4: 2,
+        5: 2,
+        6: 1,
         7: 0
     }
     label_mapping = {
@@ -146,6 +142,7 @@ if __name__ == "__main__":
         6: "Fuzzers",
         7: "Exploits"
     }
+    feature_names = df_orig.drop(columns=["attack_cat"]).columns.tolist()
 
     # 讀取模型
     gen = load_models(num_classes=c-1)
@@ -157,7 +154,8 @@ if __name__ == "__main__":
         num_gen_dict=num_gen_dict,
         latDim=latDim,
         feature_dim=feature_dim,
+        feature_names=feature_names,
         c=c,
         label_mapping=label_mapping,
-        save_path="generated_data.csv"
+        save_path="./extra_dataset/generated_data.csv"        
     )

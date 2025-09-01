@@ -7,8 +7,8 @@ from keras.utils import register_keras_serializable
 from functools import partial
 
 class SelfAttention(Layer):
-    def __init__(self, input_dim):
-        super(SelfAttention, self).__init__()
+    def __init__(self, input_dim, **kwargs):
+        super(SelfAttention, self).__init__(**kwargs)
         self.W_query = Dense(input_dim)
         self.W_key = Dense(input_dim)
         self.W_value = Dense(input_dim)
@@ -23,6 +23,11 @@ class SelfAttention(Layer):
         attention_weights = self.softmax(attention_scores)
         out = tf.matmul(attention_weights, value)
         return out + x  # 殘差連接
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({"units": self.units})
+        return config
     
 def build_cfmu(noise_dim=32, label_dim=8):
     noise=Input(shape=(noise_dim,))
@@ -70,15 +75,23 @@ def build_cfmu(noise_dim=32, label_dim=8):
 #     genProcess=Model(ip1, genProcessFinal, name="GAMOGen")
 #     return genProcess
 
-# 將 dataMinor 轉成 tf.constant
-def dataMinor_tf(x):
-	return tf.constant(x, dtype=tf.float32)
+@register_keras_serializable(package="Custom")
+class GenProcessFinal(Layer):
+	def __init__(self, dataMinor, **kwargs):
+		super().__init__(**kwargs)
+		self.dataMinor = tf.constant(dataMinor, dtype=tf.float32)
 
-@register_keras_serializable(package='Custom')
-def gen_process_final_fn(x, dataMinor):
-	result = tf.tensordot(x, dataMinor, axes=[[2], [0]])
-	result = tf.reduce_mean(result, axis=1)
-	return result
+	def call(self, inputs):
+		result = tf.tensordot(inputs, self.dataMinor, axes=[[2], [0]])
+		result = tf.reduce_mean(result, axis=1)
+		return result
+
+	def get_config(self):
+		config = super().get_config()
+		config.update({
+			"dataMinor": self.dataMinor.numpy()
+		})
+		return config
 
 def denseGamoGenCreate(input_dim, numMinor, dataMinor):
 	ip1 = Input(shape=(input_dim,))
@@ -89,10 +102,8 @@ def denseGamoGenCreate(input_dim, numMinor, dataMinor):
 	x = Dense(numMinor, activation='softmax')(x)
 	x = RepeatVector(42)(x)
 
-	# 用 partial 將 dataMinor 綁定
-	lambda_fn = partial(gen_process_final_fn, dataMinor=dataMinor_tf(dataMinor))
 
-	genProcessFinal = Lambda(lambda_fn, output_shape=(42,))(x)
+	genProcessFinal = GenProcessFinal(dataMinor)(x)
 
 	genProcess = Model(ip1, genProcessFinal, name="GAMOGen")
 	return genProcess
