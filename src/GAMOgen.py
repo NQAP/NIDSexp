@@ -51,7 +51,7 @@ def generate_samples_per_class(gen, cfmu_gen, num_samples, latDim, feature_dim, 
     return fakePoints, np.full((num_samples,), target_class)
 
 
-def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, save_path="./extra_dataset/generated_data.csv"):
+def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, original_df=None, save_path="./extra_dataset/generated_data.csv"):
     """
     批量生成所有類別的樣本，並存成 CSV
     num_gen_dict: dict 或 list，key=class id, value=生成數量
@@ -83,16 +83,20 @@ def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, featu
 
     df = pd.DataFrame(all_data, columns=feature_names)
     df["label"] = all_labels
-    df.to_csv(save_path, index=False, encoding="utf-8-sig")
+    if original_df is not None:
+        df_final = pd.concat([original_df, df], ignore_index=True)
+    else:
+        df_final = df
+    df_final.to_csv(save_path, index=False, encoding="utf-8-sig")
     print(f"✅ 生成完成，存成 {save_path}，共 {df.shape[0]} 筆樣本")
 
-    return df
+    return df_final
 
 if __name__ == "__main__":
 
     # 參數
 
-    df_orig = pd.read_csv("./extra_dataset/df_minority_train.csv")
+    df_orig = pd.read_csv("./extra_dataset/minority_class.csv")
 
     chi_m = 33393
 
@@ -157,5 +161,6 @@ if __name__ == "__main__":
         feature_names=feature_names,
         c=c,
         label_mapping=label_mapping,
+        original_df=df_orig,
         save_path="./extra_dataset/generated_data.csv"        
     )
