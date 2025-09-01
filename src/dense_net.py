@@ -7,12 +7,13 @@ from keras.utils import register_keras_serializable
 from functools import partial
 
 class SelfAttention(Layer):
-    def __init__(self, input_dim, **kwargs):
+    def __init__(self, units, **kwargs):
         super(SelfAttention, self).__init__(**kwargs)
-        self.W_query = Dense(input_dim)
-        self.W_key = Dense(input_dim)
-        self.W_value = Dense(input_dim)
+        self.W_query = Dense(units)
+        self.W_key = Dense(units)
+        self.W_value = Dense(units)
         self.softmax = Softmax(axis=-1)
+        self.units = units  # ⭐ 這行很重要，記住 units
     
     def call(self, x):
         query = self.W_query(x)

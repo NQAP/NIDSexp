@@ -1,6 +1,4 @@
 from preprocessing import preprocessing
-# from GAMOoversampling import GAMOpreprocessing
-from GAMOdemo import Generator, GAMOpreprocessing
 from sklearn.model_selection import train_test_split
 import argparse
 import numpy as np

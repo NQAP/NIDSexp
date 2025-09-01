@@ -1,4 +1,4 @@
-    # For running in python 2.x
+# For running in python 2.x
 from __future__ import print_function, unicode_literals
 from __future__ import absolute_import, division
 
@@ -32,7 +32,7 @@ fileEnd, savePath='_Model.h5', fileStart+'/'
 latDim, modelSamplePd, resSamplePd=32, 500, 250
 plt.ion()
 
-batchSize, max_step=32, 2
+batchSize, max_step=32, 5000
 
 trainS, labelTr=spp.fileRead(fileName[0])
 testS, labelTs=spp.fileRead(fileName[1])
@@ -168,7 +168,7 @@ while step<max_step:
                 gen[i].save(direcPath+'/GenForClass_'+str(i)+'_'+str(step)+fileEnd)
 
         step=step+2
-        if step>=max_step: 
+        if step>=max_step:
             break
 
 pLabel=np.argmax(mlp.predict(trainS), axis=1)

@@ -23,7 +23,7 @@ def build_cfmu(noise_dim=32, label_dim=8):
     gamoGen.summary()
     return Model([noise, labels], x, name="CFMU")
 
-def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_2/GenForClass_", gen_postfix="_2_Model"):
+def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_5000/GenForClass_", gen_postfix="_5000_Model"):
     """
     載入所有生成器和 cfmu_gen
     """
@@ -111,31 +111,20 @@ if __name__ == "__main__":
         "Worms": 130
     }
 
-
-
     c = 8  # 類別數
     latDim = 32
     feature_dim = 42
-    # num_gen_dict = {
-    #     0: 33263,
-    #     1: 32260,
-    #     2: 31647,
-    #     3: 31393,
-    #     4: 22902,
-    #     5: 21129,
-    #     6: 15209,
-    #     7: 0
-    # }
     num_gen_dict = {
-        0: 1,
-        1: 3,
-        2: 3,
-        3: 3,
-        4: 2,
-        5: 2,
-        6: 1,
+        0: 33263,
+        1: 32260,
+        2: 31647,
+        3: 31393,
+        4: 22902,
+        5: 21129,
+        6: 15209,
         7: 0
     }
+
     label_mapping = {
         0: "Worms",
         1: "Shellcode",
@@ -146,6 +135,7 @@ if __name__ == "__main__":
         6: "Fuzzers",
         7: "Exploits"
     }
+    
     feature_names = df_orig.drop(columns=["attack_cat"]).columns.tolist()
 
     # 讀取模型
