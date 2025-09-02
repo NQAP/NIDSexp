@@ -5,3 +5,4 @@ __pycache__
 *.zip
 UBSW_NB15_Gamo
 .vscode
+catboost_info

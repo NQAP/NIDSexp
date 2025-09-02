@@ -5,6 +5,7 @@ from keras.layers import BatchNormalization, Concatenate, Multiply, Dot
 from keras.models import Model
 from keras.utils import register_keras_serializable
 from functools import partial
+import numpy as np
 
 class SelfAttention(Layer):
     def __init__(self, units, **kwargs):
@@ -25,6 +26,33 @@ class SelfAttention(Layer):
         out = tf.matmul(attention_weights, value)
         return out + x  # 殘差連接
     
+    def get_config(self):
+        config = super().get_config()
+        config.update({"units": self.units})
+        return config
+    
+class DataAwareAttention(Layer):
+    def __init__(self, units, dataMinor, **kwargs):
+        super(DataAwareAttention, self).__init__(**kwargs)
+        self.W_query = Dense(units)
+        self.W_key = Dense(units)
+        self.W_value = Dense(units)
+        self.softmax = Softmax(axis=-1)
+        self.units = units
+        
+        # 將 dataMinor 平均作為 context
+        self.data_context = Dense(units)(tf.constant(np.mean(dataMinor, axis=0, keepdims=True), dtype=tf.float32))
+
+    def call(self, x):
+        # x shape: (batch_size, input_dim)
+        query = self.W_query(x)                               # (batch_size, units)
+        key = self.W_key(x) + self.W_key(self.data_context)   # (batch_size, units)
+        value = self.W_value(x) + self.W_value(self.data_context)  # (batch_size, units)
+        
+        attention_scores = tf.matmul(query, key, transpose_b=True) / tf.math.sqrt(tf.cast(tf.shape(x)[-1], tf.float32))
+        attention_weights = self.softmax(attention_scores)
+        out = tf.matmul(attention_weights, value)
+        return out + x
     def get_config(self):
         config = super().get_config()
         config.update({"units": self.units})
@@ -97,12 +125,12 @@ class GenProcessFinal(Layer):
 def denseGamoGenCreate(input_dim, numMinor, dataMinor):
 	ip1 = Input(shape=(input_dim,))
 	x = Dense(32)(ip1)
+    
 	# 假設你有 SelfAttention
-	x = SelfAttention(32)(x)
+	x = DataAwareAttention(32, dataMinor=dataMinor)(x)
 
 	x = Dense(numMinor, activation='softmax')(x)
 	x = RepeatVector(42)(x)
-
 
 	genProcessFinal = GenProcessFinal(dataMinor)(x)
 

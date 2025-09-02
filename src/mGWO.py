@@ -97,13 +97,13 @@ def compute_wolf_correlation(wolf_vector, data):
 def modified_init_of_pop(train_data, pop_size, dim, iter=50):
     improved_population = []
     wolf_corr = []
-    wolves_pop = np.random.choice([0, 1], size=(pop_size, dim), p=[0.7, 0.3])
+    wolves_pop = np.random.choice([0, 1], size=(pop_size, dim))
     for i in range(len(wolves_pop)):
-        corr = compute_wolf_correlation(wolves_pop[i][:], train_data)
+        corr = compute_wolf_correlation(wolves_pop[i], train_data)
         wolf_corr.append(abs(corr))
     for i in range(len(wolf_corr)):
         if wolf_corr[i] < 0.6:
-            improved_population.append(wolves_pop[i][:])
+            improved_population.append(wolves_pop[i])
             print(f"feature subset within a wolf[{i}] is choosed!")
         else:
             print(f"feature subset within a wolf[{i}] is highly correlated!")
@@ -117,13 +117,6 @@ def mGWO(X, y, pop_size=10, max_iter=5):
     # -----------------------------
     # Initialize Population
     # -----------------------------
-    population = np.zeros((pop_size, num_features), dtype=int)
-    for i in range(pop_size):
-        # 隨機選擇特徵，但至少選 1 個
-        selected_features = np.random.choice([0, 1], size=num_features, p=[0.7, 0.3])
-        if selected_features.sum() == 0:
-            selected_features[np.random.randint(0, num_features)] = 1
-        population[i] = selected_features
 
     # -----------------------------
     # Improved Initialization: Feature Correlation Filtering
@@ -159,19 +152,19 @@ def mGWO(X, y, pop_size=10, max_iter=5):
 
         for j in tqdm(range(pop_size)):
             wolf = population[j]
-            r1, r2 = random.random(), random.random()
+            r1, r2 = np.random.rand(), np.random.rand()
             A1 = 2 * a * r1 - a
             C1 = 2 * r2
             D_alpha = abs(C1 * alpha - wolf)
             X1 = alpha[j] - A1 * D_alpha
 
-            r1, r2 = random.random(), random.random()
+            r1, r2 = np.random.rand(), np.random.rand()
             A2 = 2 * a * r1 - a
             C2 = 2 * r2
             D_beta = abs(C2 * beta - wolf)
             X2 = beta[j] - A2 * D_beta
 
-            r1, r2 = random.random(), random.random()
+            r1, r2 = np.random.rand(), np.random.rand()
             A3 = 2 * a * r1 - a
             C3 = 2 * r2
             D_delta = abs(C3 * delta - wolf)
@@ -211,7 +204,7 @@ if __name__ == "__main__":
     df = pd.read_csv("./extra_dataset/combined_oversampling.csv")
     # 生成一個假資料集
     target_column = "attack_cat"
-    X = df.drop(columns=[target_column, "label"])
+    X = df.drop(columns=target_column)
     y = df[target_column]
     X.info()
     y.info()

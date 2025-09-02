@@ -82,7 +82,7 @@ def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, featu
     df = pd.DataFrame(all_data, columns=feature_names)
 
     df = pd.DataFrame(all_data, columns=feature_names)
-    df["label"] = all_labels
+    df["attack_cat"] = all_labels
     if original_df is not None:
         df_final = pd.concat([original_df, df], ignore_index=True)
     else:
