@@ -1,12 +1,13 @@
 import optuna
 import json
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier, VotingClassifier
 from sklearn.tree import DecisionTreeClassifier
-from xgboost.sklearn import XGBClassifier
+from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 
@@ -47,6 +48,30 @@ from catboost import CatBoostClassifier
 #     # 其他模型可依需求加上 (這裡先簡化示範)
 #     return {}
 
+# ---------- 自訂投票函數 ----------
+def voting_predict(estimators, X, voting="hard"):
+    preds_list = []
+    for est in estimators:
+        pred = est.predict(X)
+        if pred.ndim > 1:  # 如果是 2D array，例如 CatBoost
+            pred = np.ravel(pred)  # 壓平成 1D
+        preds_list.append(pred)
+    preds = np.asarray(preds_list)
+
+    if voting == "hard":
+        return np.apply_along_axis(lambda x: np.bincount(x).argmax(), axis=0, arr=preds)
+    elif voting == "soft":
+        probs_list = []
+        for est in estimators:
+            if hasattr(est, "predict_proba"):
+                probs_list.append(est.predict_proba(X))
+            else:  # CatBoost
+                probs_list.append(est.predict(X, prediction_type="Probability"))
+        probs = np.mean(probs_list, axis=0)
+        return np.argmax(probs, axis=1)
+    else:
+        raise ValueError("voting must be 'hard' or 'soft'")
+
 # =============== 主程式 (SIDS) ===============
 def SIDS_pipeline(df_train, df_test, n_trials=20):
     # 分割資料
@@ -74,6 +99,7 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             max_leaf_nodes=29,
             random_state=42
         )
+    dt.fit(X_train, y_train)
     
     rf = RandomForestClassifier(
             n_estimators=128,
@@ -82,7 +108,8 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             min_samples_leaf=10,
             random_state=42,
         )
-    
+    rf.fit(X_train, y_train)
+
     et = ExtraTreesClassifier(
             n_estimators=950,
             criterion='gini',
@@ -93,6 +120,7 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             bootstrap=False,
             random_state=42
         )
+    et.fit(X_train, y_train)
     
     ab = AdaBoostClassifier(
             n_estimators=300,
@@ -100,6 +128,7 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             algorithm='SAMME',
             random_state=42
         )
+    ab.fit(X_train, y_train)
 
     lgbm = LGBMClassifier(
             learning_rate=0.007,
@@ -108,6 +137,7 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             max_depth=5,
             random_state=42
         )
+    lgbm.fit(X_train, y_train)
 
     cb = CatBoostClassifier(
             min_data_in_leaf=47,
@@ -118,15 +148,16 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             verbose=0, 
             random_state=42
         )
+    cb.fit(X_train, y_train)
 
     xgb = XGBClassifier(
             booster='dart',
             reg_lambda=0.004,
             reg_alpha=2.6e-04,
             subsample=0.367,
-            cosample_bytree=0.923,
-            # early_stopping_rounds=12,
+            colsample_bytree=0.923,
             n_estimators=16,
+            early_stopping_rounds=12,
             max_depth=7,
             min_child_weight=10,
             eta=0.1163,
@@ -136,36 +167,82 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             use_label_encoder=False, 
             eval_metric="mlogloss"
         )
-
-    # 多數投票集成
-    majority_voting = VotingClassifier(
-        estimators=[
-            ("DT", dt),
-            ("RF", rf),
-            ("ET", et),
-            ("AB", ab),
-            ("LGBM", lgbm),
-            ("CB", cb),
-            ("XGB", xgb),
-        ],
-        voting="hard"
+    xgb.fit(
+        X_train, y_train,
+        eval_set=[(X_test, y_test)],
+        verbose=False
     )
 
-    # 訓練
-    majority_voting.fit(X_train, y_train)
+    estimators = [dt, rf, et, ab, lgbm, cb, xgb]
+    predictions = voting_predict(estimators, X_test, voting="hard")
 
-    # 預測
-    predictions = majority_voting.predict(X_test)
+    # ---------- 報告 ----------
 
-    # 報告
-    report = classification_report(y_test, predictions)
-    return report
+    # 你的 label encoding 對照表
+    label_encoding = {
+        "Analysis": 0,
+        "Backdoor": 1,
+        "DoS": 2,
+        "Exploits": 3,
+        "Fuzzers": 4,
+        "Generic": 5,
+        "Normal": 6,
+        "Reconnaissance": 7,
+        "Shellcode": 8,
+        "Worms": 9
+    }
+
+    # 反轉字典，方便從數字找到文字 label
+    num_to_label = {v: k for k, v in label_encoding.items()}
+
+    # 生成 classification report（字典形式）
+    report_dict = classification_report(y_test, predictions, output_dict=True)
+
+    # 將 key（數字 label）轉換成文字 label
+    report_converted = {}
+    for key, value in report_dict.items():
+        try:
+            int_key = int(key)  # 這裡 key 可能是數字 label
+            new_key = num_to_label[int_key]
+        except:
+            new_key = key  # 其他 key (如 'accuracy', 'macro avg', 'weighted avg')
+        report_converted[new_key] = value
+
+    # 列印結果
+    # 轉成 DataFrame
+    rows = []
+    for cls, metrics in report_converted.items():
+        if isinstance(metrics, dict):
+            rows.append({
+                "class": cls,
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1-score": metrics["f1-score"],
+                "support": int(metrics["support"])
+            })
+        else:
+            rows.append({
+                "class": cls,
+                "precision": "",
+                "recall": "",
+                "f1-score": "",
+                "support": metrics
+            })
+
+    df_report = pd.DataFrame(rows)
+
+    # 存成 CSV
+    df_report.to_csv("./results/classification_report_converted_GAMO_mGWO.csv", index=False, encoding="utf-8-sig")
+
+    print("CSV 已儲存為 ./results/classification_report_converted_GAMO_mGWO.csv")
+    
+    return report_dict
 
 
 # =============== 測試用範例 (模擬資料集) ===============
 if __name__ == "__main__":
 
-    df = pd.read_csv("./extra_dataset/selected_features.csv")
+    df = pd.read_csv("./extra_dataset/selected_features_with_GAMO.csv")
 
     target_column = "attack_cat"
     le = LabelEncoder()

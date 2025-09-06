@@ -97,7 +97,8 @@ def compute_wolf_correlation(wolf_vector, data):
 def modified_init_of_pop(train_data, pop_size, dim, iter=50):
     improved_population = []
     wolf_corr = []
-    wolves_pop = np.random.choice([0, 1], size=(pop_size, dim))
+    p = 25 / dim
+    wolves_pop = np.random.choice([0, 1], size=(pop_size, dim), p=[1-p, p])
     for i in range(len(wolves_pop)):
         corr = compute_wolf_correlation(wolves_pop[i], train_data)
         wolf_corr.append(abs(corr))
@@ -201,7 +202,7 @@ if __name__ == "__main__":
 
     np.random.seed(40)
 
-    df = pd.read_csv("./extra_dataset/combined_oversampling.csv")
+    df = pd.read_csv("./extra_dataset/combined_0.csv")
     # 生成一個假資料集
     target_column = "attack_cat"
     X = df.drop(columns=target_column)

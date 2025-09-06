@@ -23,7 +23,7 @@ def build_cfmu(noise_dim=32, label_dim=8):
     gamoGen.summary()
     return Model([noise, labels], x, name="CFMU")
 
-def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_5000/GenForClass_", gen_postfix="_5000_Model"):
+def load_models(num_classes, dataMinor, gen_prefix="./UBSW_NB15_Gamo_Ver2/gamo_models_5000/GenForClass_", gen_postfix="_5000_Model"):
     """
     載入所有生成器和 cfmu_gen
     """
@@ -31,7 +31,7 @@ def load_models(num_classes, gen_prefix="./UBSW_NB15_Gamo/gamo_models_5000/GenFo
     for i in range(num_classes):
         model_path = f"{gen_prefix}{i}{gen_postfix}.h5"
         print(f"載入生成器: {model_path}")
-        gen.append(load_model(model_path, compile=False, custom_objects={"SelfAttention": SelfAttention, "GenProcessFinal": GenProcessFinal}, safe_mode=False))
+        gen.append(load_model(model_path, compile=False, custom_objects={"SelfAttention": SelfAttention, "GenProcessFinal": GenProcessFinal, "dataMinor": dataMinor}, safe_mode=False))
 
     return gen
 
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     feature_names = df_orig.drop(columns=["attack_cat"]).columns.tolist()
 
     # 讀取模型
-    gen = load_models(num_classes=c-1)
+    gen = load_models(num_classes=c-1, dataMinor=df_orig)
 
     # 批量生成
     df_generated = generate_all_classes(

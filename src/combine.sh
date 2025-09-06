@@ -2,6 +2,8 @@ python ./src/combine_train_test.py ./origin_dataset/UNSW_NB15_training-set.csv .
 
 python ./src/preprocessing.py ./extra_dataset/combined.csv
 
-python ./src/combined_major_and_minor.py ./extra_dataset/major_after_reduced.csv ./extra_dataset/generated_data.csv -o ./extra_dataset/combined_oversampling.csv --how rows
+python ./src/combined_major_and_minor.py ./extra_dataset/minority_class.csv ./extra_dataset/generated_data.csv -o ./extra_dataset/balanced_minor.csv --how rows
+
+python ./src/combined_major_and_minor.py ./extra_dataset/major_after_reduced_high_membership.csv ./extra_dataset/generated_data.csv -o ./extra_dataset/combined_0.csv --how rows
 
 conda install -c rapidsai -c nvidia -c conda-forge cudf=23.04 python=3.10 cudatoolkit=12.0
