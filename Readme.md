@@ -2,4 +2,4 @@
 
 目前進度：Gamo, FCM complete
 
-Dataset preprocessing, oversampling, feature selection are done!
+SIDS + AIDS (doesn't remove DoS) done!
