@@ -43,7 +43,7 @@ tf.config.run_functions_eagerly(True)
 
 # Ground works
 fileName=['./extra_dataset/df_minority_train.csv', './extra_dataset/df_minority_test.csv']
-fileStart='UBSW_NB15_Gamo_Ver2'
+fileStart='UBSW_NB15_Gamo_Ver3'
 fileEnd, savePath='_Model.h5', fileStart+'/'
 latDim, modelSamplePd, resSamplePd=32, 500, 50
 
@@ -320,29 +320,81 @@ while step < max_step:
         y_m_train = tf.concat([batch_labels_tf, y_fake_all], axis=0)
         weights_m = tf.concat([tf.ones(batch_real_tf.shape[0]), weights_fake_all], axis=0)
 
+        # with tf.GradientTape() as tape_M:
+        #     preds = mlp(x_m_train, training=True)
+
+        #     # 只用 tf.keras.losses.categorical_crossentropy，並加權
+        #     pred_real = preds[:batch_real_tf.shape[0]]
+        #     pred_fake = preds[batch_real_tf.shape[0]:]
+
+        #     # 原始樣本
+        #     loss_real = tf.keras.losses.categorical_crossentropy(batch_labels_tf, pred_real)
+        #     loss_real = tf.reduce_mean(loss_real)  # 平均
+
+        #     # 生成樣本（加權）
+        #     loss_fake = tf.keras.losses.categorical_crossentropy(y_fake_all, pred_fake)
+        #     loss_fake = tf.reduce_mean(loss_fake * weights_fake_all * class_weights_tf[i])
+
+        #     # 總 loss
+        #     λ_M_real = 1.0
+        #     λ_M_fake = 0.8
+        #     loss_M = λ_M_real * loss_real + λ_M_fake * loss_fake
+
+
+        # grads_M = tape_M.gradient(loss_M, mlp.trainable_variables)
+        # optimizer_M.apply_gradients(zip(grads_M, mlp.trainable_variables))
         with tf.GradientTape() as tape_M:
-            preds = mlp(x_m_train, training=True)
+            lambda_fake = 0.5
+            preds_real = mlp(batch_real_tf, training=True)   # 真樣本
+            preds_fake = mlp(x_fake_all, training=True)      # 假樣本
 
-            # 只用 tf.keras.losses.categorical_crossentropy，並加權
-            pred_real = preds[:batch_real_tf.shape[0]]
-            pred_fake = preds[batch_real_tf.shape[0]:]
+            epsilon = 1e-6
+            loss_terms = []
 
-            # 原始樣本
-            loss_real = tf.keras.losses.categorical_crossentropy(batch_labels_tf, pred_real)
-            loss_real = tf.reduce_mean(loss_real)  # 平均
+            for i in range(c):
+                Pi = P_i_dict.get(i, 1.0 / c)
 
-            # 生成樣本（加權）
-            loss_fake = tf.keras.losses.categorical_crossentropy(y_fake_all, pred_fake)
-            loss_fake = tf.reduce_mean(loss_fake * weights_fake_all * class_weights_tf[i])
+                # ------- Oi1: real, class i -------
+                idx_real_i = tf.where(tf.argmax(batch_labels_tf, axis=1) == i)[:, 0]
+                if tf.size(idx_real_i) > 0:
+                    real_i = tf.gather(preds_real, idx_real_i)
+                    Oi1 = Pi * tf.reduce_mean(tf.math.log(real_i[:, i] + epsilon))
+                    loss_terms.append(-Oi1)
 
-            # 總 loss
-            λ_M_real = 1.0
-            λ_M_fake = 0.8
-            loss_M = λ_M_real * loss_real + λ_M_fake * loss_fake
+                # ------- Oi2: real, other classes -------
+                idx_real_not_i = tf.where(tf.argmax(batch_labels_tf, axis=1) != i)[:, 0]
+                if tf.size(idx_real_not_i) > 0:
+                    real_not_i = tf.gather(preds_real, idx_real_not_i)
+                    Oi2 = Pi * tf.reduce_mean(tf.math.log(1 - real_not_i[:, i] + epsilon))
+                    loss_terms.append(-Oi2)
 
+                # ------- Oi3: fake, class i -------
+                idx_fake_i = tf.where(tf.argmax(y_fake_all, axis=1) == i)[:, 0]
+                if tf.size(idx_fake_i) > 0:
+                    fake_i = tf.gather(preds_fake, idx_fake_i)
+                    Oi3 = Pi * tf.reduce_mean(tf.math.log(fake_i[:, i] + epsilon))
+                    loss_terms.append(-lambda_fake * Oi3)
 
-        grads_M = tape_M.gradient(loss_M, mlp.trainable_variables)
-        optimizer_M.apply_gradients(zip(grads_M, mlp.trainable_variables))
+                # ------- Oi4: fake, other classes -------
+                idx_fake_not_i = tf.where(tf.argmax(y_fake_all, axis=1) != i)[:, 0]
+                if tf.size(idx_fake_not_i) > 0:
+                    fake_not_i = tf.gather(preds_fake, idx_fake_not_i)
+                    Oi4 = Pi * tf.reduce_mean(tf.math.log(1 - fake_not_i[:, i] + epsilon))
+                    loss_terms.append(-lambda_fake * Oi4)
+
+            # sum all Oi losses
+            loss_oi = tf.add_n(loss_terms)
+
+            # regularizer: categorical crossentropy
+            ce_real = tf.reduce_mean(tf.keras.losses.categorical_crossentropy(batch_labels_tf, preds_real))
+            ce_fake = tf.reduce_mean(tf.keras.losses.categorical_crossentropy(y_fake_all, preds_fake))
+            ce_loss = 0.5 * (ce_real + ce_fake)
+
+            # final loss
+            alpha = 0.2       # regularizer 強度
+            # lambda_fake = 0.5 # 假樣本影響強度
+            loss_M = loss_oi + alpha * ce_loss
+
 
 
         # ------------------------------

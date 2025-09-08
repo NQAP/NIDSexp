@@ -11,27 +11,26 @@ import json
 # -----------------------------
 # 計算 fitness function
 # -----------------------------
-def compute_fitness(features, X, y, alpha=0.5):
+def compute_fitness(features, X_train, y_train, X_test, y_test, alpha=0.5):
     # 選取被啟用的特徵
     count = 0
     idx = np.where(features == 1)[0]
     if len(idx) == 0:  # 沒有選特徵時，給一個很差的分數
         return -1
 
-    X_sub = X.iloc[:, idx]
+    X_train_sub = X_train.iloc[:, idx]
+    y_train_sub = y_train
+    X_test_sub = X_test.iloc[:, idx]
+    y_test_sub = y_test
 
-    # 訓練/測試集切分
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_sub, y, test_size=0.2, random_state=42
-    )
 
     # 使用 XGBoost 做分類
     model = XGBClassifier(eval_metric="mlogloss", device = "cuda")  # 重要：使用 GPU
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    model.fit(X_train_sub, y_train_sub)
+    y_pred = model.predict(X_test_sub)
 
     # 計算混淆矩陣
-    tn, fp, fn, tp = confusion_matrix(y_test, y_pred, labels=[0, 1]).ravel()
+    tn, fp, fn, tp = confusion_matrix(y_test_sub, y_pred, labels=[0, 1]).ravel()
 
     denom = tp + tn + fp + fn
     accuracy = (tp + tn) / denom if denom != 0 else 0
@@ -115,6 +114,14 @@ def modified_init_of_pop(train_data, pop_size, dim, iter=50):
 # -----------------------------
 def mGWO(X, y, pop_size=10, max_iter=5):
     num_features = X.shape[1]
+    le = LabelEncoder()
+    y = le.fit_transform(y)
+
+    encoding_maps = {cls: int(code) for cls, code in zip(le.classes_, le.transform(le.classes_))}
+    print(f"\n欄位 {target_column} 的對應關係： {encoding_maps}")
+    with open("./extra_dataset/GWO_label_encodings.json", "w", encoding="utf-8") as f:
+        json.dump(encoding_maps, f, ensure_ascii=False, indent=4)
+
     # -----------------------------
     # Initialize Population
     # -----------------------------
@@ -129,8 +136,12 @@ def mGWO(X, y, pop_size=10, max_iter=5):
 
     population = np.array(improved_population)
 
+    X_train, y_train, X_test, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
     # 初始 fitness 計算
-    fitness_scores = np.array([compute_fitness(population[i], X, y) for i in tqdm(range(len(population)))])
+    fitness_scores = np.array([compute_fitness(population[i], X_train, X_test, y_train, y_test) for i in tqdm(range(len(population)))])
 
     # -----------------------------
     # GWO Iteration
@@ -175,7 +186,7 @@ def mGWO(X, y, pop_size=10, max_iter=5):
             X_norm = X_new
             for k in range(len(X_new)):
                 X_norm[k] = 1 if X_new[k] > 0.5 else 0
-            fitness_new = compute_fitness(X_norm, X, y)
+            fitness_new = compute_fitness(X_norm, X_train, X_test, y_train, y_test)
             if fitness_new > fitness_scores[j]:
                 population[j] = X_norm
                 fitness_scores[j] = fitness_new
@@ -202,20 +213,13 @@ if __name__ == "__main__":
 
     np.random.seed(40)
 
-    df = pd.read_csv("./extra_dataset/combined_0.csv")
+    df = pd.read_csv("./extra_dataset/combined_1.csv")
     # 生成一個假資料集
     target_column = "attack_cat"
     X = df.drop(columns=target_column)
     y = df[target_column]
     X.info()
     y.info()
-
-    le = LabelEncoder()
-    y = le.fit_transform(y)
-    encoding_maps = {cls: int(code) for cls, code in zip(le.classes_, le.transform(le.classes_))}
-    print(f"\n欄位 {target_column} 的對應關係： {encoding_maps}")
-    with open("./extra_dataset/GWO_label_encodings.json", "w", encoding="utf-8") as f:
-        json.dump(encoding_maps, f, ensure_ascii=False, indent=4)
 
     best_feature = mGWO(X, y, pop_size=20, max_iter=86)
 

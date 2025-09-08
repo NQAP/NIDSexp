@@ -3,14 +3,7 @@ import argparse
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import json
 
-def preprocessing(file):
-    """
-    read dataset from csv files
-    """
-    # 讀取 CSV
-    df = pd.read_csv(file)
-    df.info()
-
+def preprocessing(df):
     """
     drop ID and label columns
     """

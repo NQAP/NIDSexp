@@ -208,8 +208,7 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
             new_key = key  # 其他 key (如 'accuracy', 'macro avg', 'weighted avg')
         report_converted[new_key] = value
 
-    # 列印結果
-    # 轉成 DataFrame
+    # 儲存 CSV
     rows = []
     for cls, metrics in report_converted.items():
         if isinstance(metrics, dict):
@@ -228,21 +227,21 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
                 "f1-score": "",
                 "support": metrics
             })
-
     df_report = pd.DataFrame(rows)
+    df_report.to_csv("./results/SIDS_1.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/SIDS_1.csv")
 
-    # 存成 CSV
-    df_report.to_csv("./results/classification_report_converted_GAMO_mGWO.csv", index=False, encoding="utf-8-sig")
-
-    print("CSV 已儲存為 ./results/classification_report_converted_GAMO_mGWO.csv")
+    # ---------- 取出預測為 Normal 的 row ----------
+    normal_label = label_encoding["Normal"]
+    df_normal_pred = df_test[predictions == normal_label]
     
-    return report_dict
+    return df_report, df_normal_pred
 
 
 # =============== 測試用範例 (模擬資料集) ===============
 if __name__ == "__main__":
 
-    df = pd.read_csv("./extra_dataset/selected_features_with_GAMO.csv")
+    df = pd.read_csv("./extra_dataset/combined_2.csv")
 
     target_column = "attack_cat"
     le = LabelEncoder()

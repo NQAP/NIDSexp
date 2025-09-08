@@ -1,68 +1,91 @@
 import pandas as pd
 import numpy as np
 import skfuzzy as fuzz
-import optuna
 
-# -----------------------------
-# 1. 載入資料（假設多數類資料）
-# -----------------------------
-# 假設 CSV 已經只包含多數類資料
-df_majority = pd.read_csv("./extra_dataset/encoded_majority_class.csv")
-target_column = "attack_cat"
-X = df_majority.drop(columns=target_column)
-X = X.values.T  # FCM 需要 shape = (features, samples)
+def fcm_downsample_majority(
+    df,
+    target_column,
+    target_dict,
+    n_clusters=166,
+    m=1.013,
+    random_state=42,
+    keep_low_membership_ratio=0.1,
+):
+    """
+    FCM 聚類後，對每個 class 下採樣，保證總數量等於 target_dict，
+    並可保留部分低隸屬樣本。
 
-# -----------------------------
-# 2. 定義 Fuzzy C-Means 聚類函數
-# -----------------------------
-def fcm_cluster(X, n_clusters, m):
+    參數:
+        df (pd.DataFrame): 輸入資料
+        target_column (str): 標籤欄位
+        target_dict (dict): {class_name: 保留數量}
+        n_clusters (int): FCM 聚類數
+        m (float): 模糊係數
+        random_state (int): 隨機種子
+        keep_low_membership_ratio (float): 保留低隸屬樣本比例
+
+    回傳:
+        pd.DataFrame: 下採樣後結果
     """
-    X: shape = (features, samples)
-    n_clusters: 聚類數量
-    m: 模糊係數
-    """
-    cntr, u, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
+    if random_state is not None:
+        np.random.seed(random_state)
+
+    # 1. FCM 聚類
+    X = df.drop(columns=target_column).values.T
+    cntr, u, _, _, _, _, fpc = fuzz.cluster.cmeans(
         X, c=n_clusters, m=m, error=0.005, maxiter=1025, init=None
     )
-    cluster_labels = np.argmax(u, axis=0)  # 每筆資料最可能的叢集
-    return cluster_labels, fpc  # fpc = fuzzy partition coefficient
+    cluster_labels = np.argmax(u, axis=0)
+    df = df.copy()
+    df["ClusterLabel"] = cluster_labels
 
-# -----------------------------
-# 3. 使用 OPTUNA 優化 FCM 超參數
-# -----------------------------
-# def objective(trial):
-#     n_clusters = trial.suggest_int("n_clusters", 2, 10)
-#     m = trial.suggest_float("m", 1.5, 3.0)
-#     _, fpc = fcm_cluster(X, n_clusters, m)
-#     # 目標是最大化 FPC (越接近 1 越好)
-#     return -fpc  # Optuna 預設是 minimization
+    df_downsampled = []
 
-# study = optuna.create_study()
-# study.optimize(objective, n_trials=30)
+    # 2. 對每個 class 處理
+    for class_name, target_count in target_dict.items():
+        df_sub = df[df[target_column] == class_name]
+        total_sub = len(df_sub)
+        cluster_sizes = df_sub.groupby("ClusterLabel").size()
 
-# best_params = study.best_params
-# print("Best Params:", best_params)
+        # 每個 cluster 高隸屬分配數量
+        num_per_cluster = {
+            cluster_id: int(np.round(size / total_sub * target_count * (1 - keep_low_membership_ratio)))
+            for cluster_id, size in cluster_sizes.items()
+        }
 
-# -----------------------------
-# 4. 使用最佳參數進行 FCM 聚類
-# -----------------------------
-cluster_labels, _ = fcm_cluster(X, 166, 1.013)
+        # 抽樣
+        selected_indices = []
+        for cluster_id, group in df_sub.groupby("ClusterLabel"):
+            idxs = group.index
+            membership_scores = u[cluster_id, idxs]
 
-# -----------------------------
-# 5. 將 Cluster Label 合併回原始資料
-# -----------------------------
-df_majority["ClusterLabel"] = cluster_labels
+            # 高隸屬樣本
+            n_keep_high = num_per_cluster.get(cluster_id, 0)
+            if n_keep_high >= len(group):
+                selected_indices.extend(idxs.tolist())
+            elif n_keep_high > 0:
+                top_idx = idxs[np.argsort(-membership_scores)[:n_keep_high]]
+                selected_indices.extend(top_idx.tolist())
 
-# -----------------------------
-# 6. 分組操作（可依 ClusterLabel 做後續處理）
-# -----------------------------
-grouped = df_majority.groupby("ClusterLabel")
-for cluster_id, group in grouped:
-    print(f"Cluster {cluster_id} has {len(group)} samples")
-    # 這裡可以進行生成新樣本、平衡資料等操作
+            # 低隸屬樣本
+            n_keep_low = int(len(group) * keep_low_membership_ratio)
+            # 確保總數不超過 target_count
+            remaining = target_count - len(selected_indices)
+            n_keep_low = min(n_keep_low, remaining)
+            if n_keep_low > 0:
+                low_idx = idxs[np.argsort(membership_scores)[:n_keep_low]]
+                selected_indices.extend(low_idx.tolist())
 
-# -----------------------------
-# 7. 移除 ClusterLabel 欄位（如果不需要）
-# -----------------------------
-df_final = df_majority.drop(columns=["ClusterLabel"])
-print(df_final.head())
+        # 避免超過 target_count（因四捨五入可能會多）
+        if len(selected_indices) > target_count:
+            selected_indices = np.random.choice(selected_indices, target_count, replace=False)
+        df_downsampled.append(df.loc[selected_indices])
+
+    df_sampled = pd.concat(df_downsampled).reset_index(drop=True)
+    df_sampled = df_sampled.drop(columns=["ClusterLabel"])
+
+    print("Original size:", len(df), "Downsampled size:", len(df_sampled))
+    print("FPC (fuzzy partition coefficient):", fpc)
+    print(df_sampled[target_column].value_counts())
+
+    return df_sampled

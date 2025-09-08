@@ -42,9 +42,13 @@ def fileRead(fileName):
     labels=dataTotal.iloc[:, -1].values
     return data, labels
 
+def dfRead(df):
+    data=df.iloc[:, :-1].values
+    labels=df.iloc[:, -1].values
+    return data, labels
+
 def indices(pLabel, tLabel):
     confMat=confusion_matrix(tLabel, pLabel)
-    print(confMat)
     nc=np.sum(confMat, axis=1)
     tp=np.diagonal(confMat)
     tpr=tp/nc

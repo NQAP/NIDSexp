@@ -2,95 +2,112 @@ import pandas as pd
 import numpy as np
 import skfuzzy as fuzz
 
-# -----------------------------
-# 1. 載入資料
-# -----------------------------
-df_majority = pd.read_csv("./extra_dataset/majority_class.csv")
-target_column = "attack_cat"
+def fcm_downsample_class_target_exact(
+    df,
+    target_column,
+    target_dict,
+    n_clusters=166,
+    m=1.013,
+    random_state=42,
+    keep_low_membership_ratio=0.1,
+):
+    """
+    FCM 聚類後，對每個 class 下採樣，保證總數量等於 target_dict，
+    並可保留部分低隸屬樣本。
 
-# FCM 需要 shape = (features, samples)
-X = df_majority.drop(columns=target_column).values.T  
+    參數:
+        df (pd.DataFrame): 輸入資料
+        target_column (str): 標籤欄位
+        target_dict (dict): {class_name: 保留數量}
+        n_clusters (int): FCM 聚類數
+        m (float): 模糊係數
+        random_state (int): 隨機種子
+        keep_low_membership_ratio (float): 保留低隸屬樣本比例
 
-# -----------------------------
-# 2. FCM 聚類函數
-# -----------------------------
-def fcm_cluster(X, n_clusters, m):
-    cntr, u, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
+    回傳:
+        pd.DataFrame: 下採樣後結果
+    """
+    if random_state is not None:
+        np.random.seed(random_state)
+
+    # 1. FCM 聚類
+    X = df.drop(columns=target_column).values.T
+    cntr, u, _, _, _, _, fpc = fuzz.cluster.cmeans(
         X, c=n_clusters, m=m, error=0.005, maxiter=1025, init=None
     )
     cluster_labels = np.argmax(u, axis=0)
-    return cluster_labels, fpc
+    df = df.copy()
+    df["ClusterLabel"] = cluster_labels
 
-# -----------------------------
-# 3. 聚類
-# -----------------------------
-cluster_labels, _ = fcm_cluster(X, n_clusters=166, m=1.013)
-df_majority["ClusterLabel"] = cluster_labels
+    df_downsampled = []
 
-# -----------------------------
-# 4. 設定每個 target 類別的總數
-# -----------------------------
+    # 2. 對每個 class 處理
+    for class_name, target_count in target_dict.items():
+        df_sub = df[df[target_column] == class_name]
+        total_sub = len(df_sub)
+        cluster_sizes = df_sub.groupby("ClusterLabel").size()
+
+        # 每個 cluster 高隸屬分配數量
+        num_per_cluster = {
+            cluster_id: int(np.round(size / total_sub * target_count * (1 - keep_low_membership_ratio)))
+            for cluster_id, size in cluster_sizes.items()
+        }
+
+        # 抽樣
+        selected_indices = []
+        for cluster_id, group in df_sub.groupby("ClusterLabel"):
+            idxs = group.index
+            membership_scores = u[cluster_id, idxs]
+
+            # 高隸屬樣本
+            n_keep_high = num_per_cluster.get(cluster_id, 0)
+            if n_keep_high >= len(group):
+                selected_indices.extend(idxs.tolist())
+            elif n_keep_high > 0:
+                top_idx = idxs[np.argsort(-membership_scores)[:n_keep_high]]
+                selected_indices.extend(top_idx.tolist())
+
+            # 低隸屬樣本
+            n_keep_low = int(len(group) * keep_low_membership_ratio)
+            # 確保總數不超過 target_count
+            remaining = target_count - len(selected_indices)
+            n_keep_low = min(n_keep_low, remaining)
+            if n_keep_low > 0:
+                low_idx = idxs[np.argsort(membership_scores)[:n_keep_low]]
+                selected_indices.extend(low_idx.tolist())
+
+        # 避免超過 target_count（因四捨五入可能會多）
+        if len(selected_indices) > target_count:
+            selected_indices = np.random.choice(selected_indices, target_count, replace=False)
+        df_downsampled.append(df.loc[selected_indices])
+
+    df_sampled = pd.concat(df_downsampled).reset_index(drop=True)
+    df_sampled = df_sampled.drop(columns=["ClusterLabel"])
+
+    print("Original size:", len(df), "Downsampled size:", len(df_sampled))
+    print("FPC (fuzzy partition coefficient):", fpc)
+    print(df_sampled[target_column].value_counts())
+
+    return df_sampled
+
+
+
+# 使用範例
+df_majority = pd.read_csv("./extra_dataset/majority_class.csv")
+target_column = "attack_cat"
+
 target_dict = {
     "Normal": 80912,
     "Generic": 31204
 }
 
-# -----------------------------
-# 5. 根據 cluster 大小分類
-# -----------------------------
-def classify_clusters(cluster_sizes):
-    large = []
-    small = []
-    tiny = []
-    for c, size in cluster_sizes.items():
-        if size > 20000:
-            large.append(c)
-        elif size >= 50:
-            small.append(c)
-        else:
-            tiny.append(c)
-    return large, small, tiny
+df_downsampled = fcm_downsample_class_target_exact(
+    df=df_majority,
+    target_column=target_column,
+    target_dict=target_dict,
+    n_clusters=166,
+    m=1.013,
+    random_state=42
+)
 
-# -----------------------------
-# 6. 在每個 target 類別內縮減
-# -----------------------------
-df_downsampled = []
-
-for target_value, target_count in target_dict.items():
-    df_sub = df_majority[df_majority[target_column] == target_value]
-    total_sub = len(df_sub)
-    cluster_sizes = df_sub.groupby("ClusterLabel").size()
-    
-    # 分類 cluster
-    large_clusters, small_clusters, tiny_clusters = classify_clusters(cluster_sizes)
-    
-    # 計算大 cluster 縮減比例 r
-    large_total = cluster_sizes[large_clusters].sum()
-    small_total = cluster_sizes[small_clusters].sum()
-    r = (target_count - small_total) / large_total
-    
-    # 逐 cluster 抽樣
-    for cluster_id, group in df_sub.groupby("ClusterLabel"):
-        if cluster_id in tiny_clusters:
-            continue  # 刪掉極小 cluster
-        elif cluster_id in large_clusters:
-            n_keep = int(np.floor(len(group) * r))
-        else:  # 中小 cluster
-            n_keep = len(group)
-        
-        if n_keep > 0:
-            df_downsampled.append(group.sample(n=n_keep, random_state=42))
-
-# -----------------------------
-# 7. 合併並清理
-# -----------------------------
-df_final = pd.concat(df_downsampled).reset_index(drop=True)
-df_final = df_final.drop(columns=["ClusterLabel"])
-df_final.to_csv("./extra_dataset/major_after_reduced_final.csv", index=False)
-
-# -----------------------------
-# 8. 檢視結果
-# -----------------------------
-print(df_final.head())
-print("Original size:", len(df_majority), "Downsampled size:", len(df_final))
-print(df_final[target_column].value_counts())
+df_downsampled.to_csv("./extra_dataset/FCM_1.csv", index=False)

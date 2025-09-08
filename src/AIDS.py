@@ -6,6 +6,8 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 from collections import deque
 import random
+import os
+import json
 from tqdm import tqdm
 
 # ------------------ Double DQN Agent ------------------
@@ -75,11 +77,19 @@ class DoubleDQNAgent:
     # -------- Save & Load --------
     def save(self, path_prefix):
         """Save model and agent state"""
+        # 取得目錄
+        directory = os.path.dirname(path_prefix)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)  # 建立目錄
+
+        # 存模型
         self.model.save(f"{path_prefix}_model.h5")
         self.target_model.save(f"{path_prefix}_target_model.h5")
+        
+        # 存 agent state
         np.savez(f"{path_prefix}_agent_state.npz",
-                 epsilon=self.epsilon,
-                 train_step=self.train_step)
+                epsilon=self.epsilon,
+                train_step=self.train_step)
 
     def load(self, path_prefix):
         """Load model and agent state"""
@@ -90,75 +100,93 @@ class DoubleDQNAgent:
         self.train_step = int(state["train_step"])
 
 # ------------------ Pipeline ------------------
-def anomaly_detection_pipeline(df, m=20, episodes=5):
-    # --- Step 1: Concatenate datasets ---
+def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_size=64):
+    # --- Step 1: Convert attack categories to binary labels ---
+    df['attack_cat'] = df['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
     
-
-    # --- Step 2: Map attack categories to numbers ---
-    i = 2
-    mapping = {}
-    for cat in df['attack_cat'].unique():
-        if cat == 'Normal':
-            mapping[cat] = 0
-        elif cat == 'DoS':
-            mapping[cat] = 1
-        else:
-            mapping[cat] = i
-            i += 1
-    df['attack_cat'] = df['attack_cat'].map(mapping)
-
-    # --- Step 3: Split training and testing ---
-    df_dos = df[df['attack_cat'] == 1]
-    m = df_dos.shape[0]
-    df_non_dos = df[df['attack_cat'] != 1]
-    df_normal_sample = df_non_dos[df_non_dos['attack_cat'] == 0].sample(n=m, random_state=42)
-    df_train_final = df_non_dos.drop(df_normal_sample.index)
-    df_test_final = pd.concat([df_dos, df_normal_sample], axis=0).reset_index(drop=True)
-
-    # --- Step 4: Prepare data ---
-    X_train = df_train_final.drop(columns=['attack_cat']).values
-    y_train = df_train_final['attack_cat'].values
-    X_test = df_test_final.drop(columns=['attack_cat']).values
-    y_test = df_test_final['attack_cat'].values
-
+    # --- Step 2: Train/test split ---
+    X = df.drop(columns=['attack_cat']).values
+    y = df['attack_cat'].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    
+    # --- Optional: sample a subset for faster training ---
+    if sample_size < len(X_train):
+        idx = np.random.choice(len(X_train), sample_size, replace=False)
+        X_train = X_train[idx]
+        y_train = y_train[idx]
+    
     state_dim = X_train.shape[1]
-    action_dim = len(np.unique(y_train))
+    action_dim = 2  # Normal / Attack
     agent = DoubleDQNAgent(state_dim, action_dim)
-
-    # --- Step 5: Train Double DQN ---
-    total_times = episodes * len(X_train)
-    for e in tqdm(range(total_times)):
-        i = e % len(X_train)
-
-        state = X_train[i]
-        action = agent.act(state)
-        reward = 1 if action == y_train[i] else -1
-        next_state = X_train[i+1] if i < len(X_train)-1 else np.zeros_like(state)
-        done = (i == len(X_train)-1)
-        agent.remember(state, action, reward, next_state, done)
-        if (e+1) % 10 == 0:
+    
+    # --- Step 3: Train Double DQN ---
+    for epoch in tqdm(range(episodes)):
+        idxs = np.random.permutation(len(X_train))
+        for start in tqdm(range(0, len(X_train), 10)):
+            end = start + 10
+            batch_idx = idxs[start:end]
+            for i in batch_idx:
+                state = X_train[i]
+                action = agent.act(state)
+                reward = 1 if action == y_train[i] else -1
+                next_state = X_train[i+1] if i < len(X_train)-1 else np.zeros_like(state)
+                done = (i == len(X_train)-1)
+                agent.remember(state, action, reward, next_state, done)
             agent.replay()
-        
-        if (e+1) % len(X_train) == 0:
-            print (f"epoch {e//len(X_train)} complete!")
-        
-    # 訓練後存檔
-    agent.save("dqn_agent")
+        print(f"Epoch {epoch+1}/{episodes} complete!")
 
-    # 之後要載入
-    # new_agent = DoubleDQNAgent(state_dim, action_dim)
-    # new_agent.load("dqn_agent")
-
-    # --- Step 6: Test ---
-    y_pred = [agent.act(s) for s in X_test]
+    agent.save("./model/AIDS_agent/agent_0")
+    
+    # --- Step 4: Test ---
+    y_pred = np.argmax(agent.model.predict(X_test, verbose=0), axis=1)
     report = classification_report(y_test, y_pred)
-    return report
+    print(report)
+
+    num_to_label = {
+        0: "Normal",
+        1: "Attack"
+    }
+
+    # 將 key（數字 label）轉換成文字 label
+    report_converted = {}
+    for key, value in report.items():
+        try:
+            int_key = int(key)  # 這裡 key 可能是數字 label
+            new_key = num_to_label[int_key]
+        except:
+            new_key = key  # 其他 key (如 'accuracy', 'macro avg', 'weighted avg')
+        report_converted[new_key] = value
+    print(report)
+
+    # 儲存 CSV
+    rows = []
+    for cls, metrics in report_converted.items():
+        if isinstance(metrics, dict):
+            rows.append({
+                "class": cls,
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1-score": metrics["f1-score"],
+                "support": int(metrics["support"])
+            })
+        else:
+            rows.append({
+                "class": cls,
+                "precision": "",
+                "recall": "",
+                "f1-score": "",
+                "support": metrics
+            })
+
+    df_report = pd.DataFrame(rows)
+    df_report.to_csv("./results/AIDS_1.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/AIDS_1.csv")
+    print(df_report)
+
+    return df_report
 
 # ------------------ Sample Usage ------------------
-df = pd.read_csv("./extra_dataset/combined_after_preprocessing.csv")
-
-df_train, df_test = train_test_split(df, test_size=0.5)
-
-report = anomaly_detection_pipeline(df_train, m=20, episodes=5)
-print(report)
+# df = pd.read_csv("./extra_dataset/combined_2.csv")
+# report = anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3)
+# print(report)
 

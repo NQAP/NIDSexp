@@ -23,7 +23,7 @@ def build_cfmu(noise_dim=32, label_dim=8):
     gamoGen.summary()
     return Model([noise, labels], x, name="CFMU")
 
-def load_models(num_classes, dataMinor, gen_prefix="./UBSW_NB15_Gamo_Ver2/gamo_models_5000/GenForClass_", gen_postfix="_5000_Model"):
+def load_models(num_classes, dataMinor, gen_prefix="./UBSW_NB15_Gamo_Ver3/gamo_models_3500/GenForClass_", gen_postfix="_3500_Model"):
     """
     載入所有生成器和 cfmu_gen
     """
@@ -51,12 +51,16 @@ def generate_samples_per_class(gen, cfmu_gen, num_samples, latDim, feature_dim, 
     return fakePoints, np.full((num_samples,), target_class)
 
 
-def generate_all_classes(gen, cfmu_gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, original_df=None, save_path="./extra_dataset/generated_data.csv"):
+def generate_all_classes(gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, original_df=None, save_path="./extra_dataset/generated_data.csv"):
     """
     批量生成所有類別的樣本，並存成 CSV
     num_gen_dict: dict 或 list，key=class id, value=生成數量
                   例如 {0:500, 1:200, 2:300}
     """
+    cfmu_model_path="./model/cfmu_model/pretrained_cfmu_label_guided.h5"
+    cfmu_gen = load_model(cfmu_model_path, custom_objects={"SelfAttention": SelfAttention})
+    cfmu_gen.trainable = False
+
     all_data = []
     all_labels = []
 
@@ -144,7 +148,6 @@ if __name__ == "__main__":
     # 批量生成
     df_generated = generate_all_classes(
         gen=gen,
-        cfmu_gen=build_cfmu(),
         num_gen_dict=num_gen_dict,
         latDim=latDim,
         feature_dim=feature_dim,
@@ -152,5 +155,5 @@ if __name__ == "__main__":
         c=c,
         label_mapping=label_mapping,
         original_df=df_orig,
-        save_path="./extra_dataset/generated_data.csv"        
+        save_path="./extra_dataset/generated_data_2.csv"        
     )
