@@ -10,6 +10,9 @@ from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # =============== 超參數最佳化函數 (以 RandomForest 為例) ===============
 # def objective_rf(trial, X, y):
@@ -75,6 +78,20 @@ def voting_predict(estimators, X, voting="hard"):
 # =============== 主程式 (SIDS) ===============
 def SIDS_pipeline(df_train, df_test, n_trials=20):
     # 分割資料
+
+    # 調參 (示範僅做 DT, RF，其他模型可依需求補齊)
+    # best_params_dt = tune_model("DT", X_train, y_train, n_trials=n_trials)
+    # best_params_rf = tune_model("RF", X_train, y_train, n_trials=n_trials)
+    target_column = "attack_cat"
+    le = LabelEncoder()
+    df_train[target_column] = le.fit_transform(df_train[target_column])
+    df_test[target_column] = le.fit_transform(df_test[target_column])
+    encoding_maps = {cls: int(code) for cls, code in zip(le.classes_, le.transform(le.classes_))}
+    print(f"\n欄位 {target_column} 的對應關係： {encoding_maps}")
+    # 儲存對應關係到 JSON 檔
+    with open("./inter_data/SIDS_label_encodings.json", "w", encoding="utf-8") as f:
+        json.dump(encoding_maps, f, ensure_ascii=False, indent=4)
+
     X_train, y_train = df_train.drop("attack_cat", axis=1), df_train["attack_cat"]
     X_test, y_test = df_test.drop("attack_cat", axis=1), df_test["attack_cat"]
 
@@ -82,11 +99,6 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
     print(y_train.shape)
     print(X_test.shape)
     print(y_test.shape)
-
-    # 調參 (示範僅做 DT, RF，其他模型可依需求補齊)
-    # best_params_dt = tune_model("DT", X_train, y_train, n_trials=n_trials)
-    # best_params_rf = tune_model("RF", X_train, y_train, n_trials=n_trials)
-
     # 建立模型
     dt = DecisionTreeClassifier(
             splitter='random',
@@ -177,7 +189,6 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
     predictions = voting_predict(estimators, X_test, voting="hard")
 
     # ---------- 報告 ----------
-
     # 你的 label encoding 對照表
     label_encoding = {
         "Analysis": 0,
@@ -228,14 +239,48 @@ def SIDS_pipeline(df_train, df_test, n_trials=20):
                 "support": metrics
             })
     df_report = pd.DataFrame(rows)
-    df_report.to_csv("./results/SIDS_1.csv", index=False, encoding="utf-8-sig")
-    print("CSV 已儲存為 ./results/SIDS_1.csv")
+    df_report.to_csv("./results/SIDS_2.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/SIDS_2.csv")
 
+    labels = [
+        "Analysis", "Backdoor", "DoS", "Exploits", "Fuzzers",
+        "Generic", "Normal", "Reconnaissance", "Shellcode", "Worms"
+    ]
+
+    # 混淆矩陣 (10x10)
+    cm = confusion_matrix(y_test, predictions, labels=range(len(labels)))
+
+    print("Confusion Matrix (10 classes):")
+    print(cm)
+
+    # 繪圖（Seaborn heatmap）
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=False, fmt="d", cmap="Blues",
+                xticklabels=labels, yticklabels=labels)
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.title("SIDS Confusion Matrix (10 classes)")
+    plt.show()
+
+    
+
+    
     # ---------- 取出預測為 Normal 的 row ----------
     normal_label = label_encoding["Normal"]
     df_normal_pred = df_test[predictions == normal_label]
+
+    # 建立反向映射
+    inverse_label_encoding = {v: k for k, v in label_encoding.items()}
+
+    df_normal_pred[target_column] = df_normal_pred[target_column].map(inverse_label_encoding)  # 假設 column 名稱是 'label'
+
+    df_pred_non_normal = df_test[predictions != normal_label].copy()
+    df_pred_non_normal[target_column] = df_pred_non_normal[target_column].map(inverse_label_encoding)
+
+
+    print(df_normal_pred.info())
     
-    return df_report, df_normal_pred
+    return df_report, predictions, df_normal_pred, df_pred_non_normal
 
 
 # =============== 測試用範例 (模擬資料集) ===============

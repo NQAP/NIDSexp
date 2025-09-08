@@ -24,9 +24,9 @@ def train_gamo_pipeline(
     max_step=5000,
     resSamplePd=100,
     modelSamplePd=500,
-    epochs_pretrain_M=50,
-    epochs_pretrain_D=10,
-    warmup_epochs_MG=50,
+    epochs_pretrain_M=20,
+    epochs_pretrain_D=5,
+    warmup_epochs_MG=20,
 ):
     # ---------------- GPU setup ----------------
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -99,7 +99,7 @@ def train_gamo_pipeline(
 
     ce_none = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
 
-    epochs_pretrain_M = 50
+    epochs_pretrain_M = 0
     target_samples = 10000
     num_samples_class = np.array([137, 1220, 1847, 2151, 11122, 13098, 19459, 35607])
     oversample_times = np.ceil(target_samples / num_samples_class).astype(int)
@@ -214,7 +214,7 @@ def train_gamo_pipeline(
     # ---------------- Pretrain D ----------------
     # （同樣保留 pretrain D 的流程）
 
-    epochs_pretrain_D = 10
+    epochs_pretrain_D = 0
 
     # 先取得少數類 id
     minor_class_ids = [i for i in range(c)]
@@ -327,7 +327,9 @@ def train_gamo_pipeline(
         for i in new_P_i_dict.keys():
             new_P_i_dict[i] /= total
         return new_P_i_dict
+    
 
+    warmup_epochs_MG = 0
     batch_size_warmup = 512
     feat_layer = mlp.layers[-2]
 
@@ -415,9 +417,13 @@ def train_gamo_pipeline(
     noise_dim = latDim
     iter=int(np.ceil(max_step/resSamplePd)+1)
     optimizer_D = get_optimizer(1e-5)
+    dis.compile(loss="categorical_crossentropy", optimizer=optimizer_D)
     optimizer_M = get_optimizer(5e-4)
+    mlp.compile(loss="categorical_crossentropy", optimizer=optimizer_M)
     for i in range(imbClsNum):
-        optimizer_G.append(get_optimizer(1e-4))
+        gen_i = get_optimizer(1e-4)
+        gen[i].compile(optimizer=gen_i)
+        optimizer_G.append(gen_i)
     
     # ------------------------------
     # Loss 儲存 (每個少數類別分開)
@@ -520,8 +526,8 @@ def train_gamo_pipeline(
                 # lambda_fake = 0.5 # 假樣本影響強度
                 loss_M = loss_oi + alpha * ce_loss
 
-            grads = tape_M.gradient(loss_M, dis.trainable_variables)
-            optimizer_M.apply_gradients(zip(grads, dis.trainable_variables))
+            grads = tape_M.gradient(loss_M, mlp.trainable_variables)
+            optimizer_M.apply_gradients(zip(grads, mlp.trainable_variables))
 
             # ------------------------------
             # 1️⃣ 更新 Discriminator (D)

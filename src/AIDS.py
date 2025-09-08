@@ -93,8 +93,8 @@ class DoubleDQNAgent:
 
     def load(self, path_prefix):
         """Load model and agent state"""
-        self.model = models.load_model(f"{path_prefix}_model.h5")
-        self.target_model = models.load_model(f"{path_prefix}_target_model.h5")
+        self.model = models.load_model(f"{path_prefix}_model.h5", compile=False)
+        self.target_model = models.load_model(f"{path_prefix}_target_model.h5", compile=False)
         state = np.load(f"{path_prefix}_agent_state.npz")
         self.epsilon = float(state["epsilon"])
         self.train_step = int(state["train_step"])
@@ -122,8 +122,8 @@ def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_s
     # --- Step 3: Train Double DQN ---
     for epoch in tqdm(range(episodes)):
         idxs = np.random.permutation(len(X_train))
-        for start in tqdm(range(0, len(X_train), 10)):
-            end = start + 10
+        for start in tqdm(range(0, len(X_train), 64)):
+            end = start + 64
             batch_idx = idxs[start:end]
             for i in batch_idx:
                 state = X_train[i]
@@ -185,8 +185,75 @@ def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_s
 
     return df_report
 
+
+# --- Step 2: Train/test split ---
+def only_predict(
+    df,
+    model_path = "./model/AIDS_agent/agent_0"
+):
+    df_test = df.copy()
+    df_test['attack_cat'] = df_test['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
+    
+    # --- Step 2: Train/test split ---
+    X_test = df_test.drop(columns=['attack_cat']).values
+    y_test = df_test['attack_cat'].values
+    state_dim = X_test.shape[1]
+    action_dim = 2  # Normal / Attack
+    agent = DoubleDQNAgent(state_dim, action_dim)
+    agent.load(model_path)
+
+    y_pred = np.argmax(agent.model.predict(X_test, verbose=0), axis=1)
+    report = classification_report(y_test, y_pred, output_dict=True)
+
+    num_to_label = {
+        0: "Normal",
+        1: "Attack"
+    }
+
+    # 將 key（數字 label）轉換成文字 label
+    report_converted = {}
+    for key, value in report.items():
+        try:
+            int_key = int(key)  # 這裡 key 可能是數字 label
+            new_key = num_to_label[int_key]
+        except:
+            new_key = key  # 其他 key (如 'accuracy', 'macro avg', 'weighted avg')
+        report_converted[new_key] = value
+    print(report)
+
+    rows = []
+    for cls, metrics in report_converted.items():
+        if isinstance(metrics, dict):
+            rows.append({
+                "class": cls,
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1-score": metrics["f1-score"],
+                "support": int(metrics["support"])
+            })
+        else:
+            rows.append({
+                "class": cls,
+                "precision": "",
+                "recall": "",
+                "f1-score": "",
+                "support": metrics
+            })
+
+    df_report = pd.DataFrame(rows)
+    df_report.to_csv("./results/AIDS_2.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/AIDS_2.csv")
+
+    return report, y_pred
+
+
+
 # ------------------ Sample Usage ------------------
 # df = pd.read_csv("./extra_dataset/combined_2.csv")
 # report = anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3)
 # print(report)
 
+
+# df = pd.read_csv("./inter_data/selected_feat_0.csv")
+# # --- Step 1: Convert attack categories to binary labels ---
+# df['attack_cat'] = df['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)

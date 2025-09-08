@@ -3,89 +3,84 @@ import numpy as np
 import skfuzzy as fuzz
 
 def fcm_downsample_majority(
-    df,
+    df_majority,
     target_column,
     target_dict,
     n_clusters=166,
     m=1.013,
-    random_state=42,
-    keep_low_membership_ratio=0.1,
+    output_path=None,
+    random_state=42
 ):
     """
-    FCM 聚類後，對每個 class 下採樣，保證總數量等於 target_dict，
-    並可保留部分低隸屬樣本。
+    使用 Fuzzy C-Means 進行聚類，並依據高隸屬度進行下採樣。
 
     參數:
-        df (pd.DataFrame): 輸入資料
-        target_column (str): 標籤欄位
+        df_majority (pd.DataFrame): 輸入 DataFrame
+        target_column (str): 分類標籤欄位
         target_dict (dict): {class_name: 保留數量}
-        n_clusters (int): FCM 聚類數
-        m (float): 模糊係數
-        random_state (int): 隨機種子
-        keep_low_membership_ratio (float): 保留低隸屬樣本比例
+        n_clusters (int): 聚類數
+        m (float): FCM 模糊係數
+        output_path (str): 輸出檔案路徑 (選填)
+        random_state (int): 隨機種子 (選填)
 
     回傳:
-        pd.DataFrame: 下採樣後結果
+        pd.DataFrame: 下採樣後的 DataFrame
     """
+
     if random_state is not None:
         np.random.seed(random_state)
 
-    # 1. FCM 聚類
-    X = df.drop(columns=target_column).values.T
+    # 1. 取特徵矩陣
+    X = df_majority.drop(columns=target_column).values.T  # shape = (features, samples)
+
+    # 2. FCM 聚類
     cntr, u, _, _, _, _, fpc = fuzz.cluster.cmeans(
         X, c=n_clusters, m=m, error=0.005, maxiter=1025, init=None
     )
     cluster_labels = np.argmax(u, axis=0)
-    df = df.copy()
-    df["ClusterLabel"] = cluster_labels
+    df_majority = df_majority.copy()
+    df_majority["ClusterLabel"] = cluster_labels
 
+    # 3. 高隸屬度抽樣函數
+    def membership_weighted_sampling(df_sub, cluster_id, n_keep, u):
+        group_idx = df_sub.index
+        weights = u[cluster_id, group_idx]
+        if weights.sum() > 0:
+            weights = weights / weights.sum()
+        else:
+            weights = None
+        chosen_idx = np.random.choice(group_idx, size=n_keep, replace=False, p=weights)
+        return df_sub.loc[chosen_idx]
+
+    # 4. 在每個 target value 內依 cluster 下採樣
     df_downsampled = []
-
-    # 2. 對每個 class 處理
-    for class_name, target_count in target_dict.items():
-        df_sub = df[df[target_column] == class_name]
+    for target_value, target_count in target_dict.items():
+        df_sub = df_majority[df_majority[target_column] == target_value]
         total_sub = len(df_sub)
         cluster_sizes = df_sub.groupby("ClusterLabel").size()
 
-        # 每個 cluster 高隸屬分配數量
-        num_per_cluster = {
-            cluster_id: int(np.round(size / total_sub * target_count * (1 - keep_low_membership_ratio)))
+        num_target_per_cluster = {
+            cluster_id: int(np.round(size / total_sub * target_count))
             for cluster_id, size in cluster_sizes.items()
         }
 
-        # 抽樣
-        selected_indices = []
         for cluster_id, group in df_sub.groupby("ClusterLabel"):
-            idxs = group.index
-            membership_scores = u[cluster_id, idxs]
+            n_keep = num_target_per_cluster[cluster_id]
+            if n_keep >= len(group):
+                df_downsampled.append(group)
+            else:
+                df_downsampled.append(membership_weighted_sampling(group, cluster_id, n_keep, u))
 
-            # 高隸屬樣本
-            n_keep_high = num_per_cluster.get(cluster_id, 0)
-            if n_keep_high >= len(group):
-                selected_indices.extend(idxs.tolist())
-            elif n_keep_high > 0:
-                top_idx = idxs[np.argsort(-membership_scores)[:n_keep_high]]
-                selected_indices.extend(top_idx.tolist())
+    # 5. 合併並清理
+    df_final = pd.concat(df_downsampled).reset_index(drop=True)
+    df_final = df_final.drop(columns=["ClusterLabel"])
 
-            # 低隸屬樣本
-            n_keep_low = int(len(group) * keep_low_membership_ratio)
-            # 確保總數不超過 target_count
-            remaining = target_count - len(selected_indices)
-            n_keep_low = min(n_keep_low, remaining)
-            if n_keep_low > 0:
-                low_idx = idxs[np.argsort(membership_scores)[:n_keep_low]]
-                selected_indices.extend(low_idx.tolist())
+    # 6. 輸出 CSV (若有指定)
+    if output_path:
+        df_final.to_csv(output_path, index=False)
 
-        # 避免超過 target_count（因四捨五入可能會多）
-        if len(selected_indices) > target_count:
-            selected_indices = np.random.choice(selected_indices, target_count, replace=False)
-        df_downsampled.append(df.loc[selected_indices])
-
-    df_sampled = pd.concat(df_downsampled).reset_index(drop=True)
-    df_sampled = df_sampled.drop(columns=["ClusterLabel"])
-
-    print("Original size:", len(df), "Downsampled size:", len(df_sampled))
+    print("Original size:", len(df_majority), "Downsampled size:", len(df_final))
+    print(df_final[target_column].value_counts())
     print("FPC (fuzzy partition coefficient):", fpc)
-    print(df_sampled[target_column].value_counts())
 
-    return df_sampled
+    return df_final

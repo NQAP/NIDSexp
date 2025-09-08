@@ -37,7 +37,7 @@ def compute_fitness(features, X_train, y_train, X_test, y_test, alpha=0.5):
     error_rate = (fp + fn) / denom if denom != 0 else 1  # 錯誤率可視需求設 1
     FAR = fp / (fp + tn + 1e-6)  # 避免除以 0
 
-    total_features = X.shape[1]
+    total_features = X_train.shape[1]
 
     for i in range(len(features)):
         if features[i] == 1:
@@ -116,7 +116,7 @@ def mGWO(X, y, pop_size=10, max_iter=5):
     num_features = X.shape[1]
     le = LabelEncoder()
     y = le.fit_transform(y)
-
+    target_column = "attack_cat"
     encoding_maps = {cls: int(code) for cls, code in zip(le.classes_, le.transform(le.classes_))}
     print(f"\n欄位 {target_column} 的對應關係： {encoding_maps}")
     with open("./extra_dataset/GWO_label_encodings.json", "w", encoding="utf-8") as f:
