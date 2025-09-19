@@ -138,27 +138,27 @@ if __name__ == "__main__":
 
     df_train, df_test = train_test_split(df_selected, test_size=0.2, random_state=42)
 
-    # df_SIDS_report, SIDS_pred, df_norm_pred, df_pred_non_norm = SIDS_pipeline(df_train=df_train, df_test=df_test, n_trials=10)
+    df_SIDS_report, SIDS_pred, df_norm_pred, df_pred_non_norm = SIDS_pipeline(df_train=df_train, df_test=df_test, n_trials=10)
 
-    # report = anomaly_detection_pipeline_binary(df_selected, episodes=5)
+    report = anomaly_detection_pipeline_binary(df_selected, episodes=5)
 
-    # report, AIDS_pred = only_predict(df=df_norm_pred)
+    report, AIDS_pred = only_predict(df=df_norm_pred)
 
-    # print ("SIDS_pred = ", SIDS_pred)
-    # print ("AIDS_pred = ", AIDS_pred)
+    print ("SIDS_pred = ", SIDS_pred)
+    print ("AIDS_pred = ", AIDS_pred)
 
     direcPath=os.path.join("./results", "prediction")
 
-    # if not os.path.exists(direcPath):
-    #     os.makedirs(direcPath)
+    if not os.path.exists(direcPath):
+        os.makedirs(direcPath)
 
-    # resSave=os.path.join(direcPath, 'SIDS')
-    # np.savez(resSave, SIDS_pred=SIDS_pred)
-    # recordSave=os.path.join(direcPath, 'AIDS')
-    # np.savez(recordSave, AIDS_pred=AIDS_pred)
+    resSave=os.path.join(direcPath, 'SIDS')
+    np.savez(resSave, SIDS_pred=SIDS_pred)
+    recordSave=os.path.join(direcPath, 'AIDS')
+    np.savez(recordSave, AIDS_pred=AIDS_pred)
 
-    # df_norm_pred.to_csv("./results/prediction/normal.csv")
-    # df_pred_non_norm.to_csv("./results/prediction/non_normal.csv")
+    df_norm_pred.to_csv("./results/prediction/normal.csv")
+    df_pred_non_norm.to_csv("./results/prediction/non_normal.csv")
 
     data = np.load('./results/prediction/SIDS.npz')
     SIDS_pred = data['SIDS_pred']
