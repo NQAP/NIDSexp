@@ -241,10 +241,98 @@ def only_predict(
             })
 
     df_report = pd.DataFrame(rows)
-    df_report.to_csv("./results/AIDS_2.csv", index=False, encoding="utf-8-sig")
-    print("CSV 已儲存為 ./results/AIDS_2.csv")
+    df_report.to_csv("./results/AIDS_1.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/AIDS_1.csv")
 
     return report, y_pred
+
+# ------------------ Pipeline ------------------
+def anomaly_detection_use_dos(df, sample_size=20000, episodes=3, batch_size=64):
+    # --- Step 2: Construct custom Train/Test split ---
+    # 把 DoS 當測試集的一部分
+    df_dos = df[df['attack_cat'] == 'DoS']
+    df_normal = df[df['attack_cat'] == 'Normal']
+
+    # 取 m 筆 Normal 當測試集
+    df_normal_test = df_normal.sample(n=len(df_dos), random_state=42)
+    # 測試集 = 所有 DoS + m 筆 Normal
+    df_test = pd.concat([df_dos, df_normal_test], axis=0)
+    # 訓練集 = 剩下的資料
+    df_train = df.drop(df_test.index)
+
+    df_test['attack_cat'] = df_test['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
+    df_train['attack_cat'] = df_train['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
+
+    # --- Step 3: 取樣訓練集 (sample_size=20000) ---
+    if sample_size < len(df_train):
+        df_train = df_train.sample(n=sample_size, random_state=42)
+
+    # --- Step 4: 準備數據 ---
+    X_train, y_train = df_train.drop(columns=['attack_cat']).values, df_train['attack_cat'].values
+    X_test, y_test = df_test.drop(columns=['attack_cat']).values, df_test['attack_cat'].values
+
+    state_dim = X_train.shape[1]
+    action_dim = 2  # Normal / Attack
+    agent = DoubleDQNAgent(state_dim, action_dim)
+
+    # --- Step 5: Train Double DQN ---
+    for epoch in tqdm(range(episodes)):
+        idxs = np.random.permutation(len(X_train))
+        for start in tqdm(range(0, len(X_train), batch_size)):
+            end = start + batch_size
+            batch_idx = idxs[start:end]
+            for i in batch_idx:
+                state = X_train[i]
+                action = agent.act(state)
+                reward = 1 if action == y_train[i] else -1
+                next_state = X_train[i+1] if i < len(X_train)-1 else np.zeros_like(state)
+                done = (i == len(X_train)-1)
+                agent.remember(state, action, reward, next_state, done)
+            agent.replay()
+        print(f"Epoch {epoch+1}/{episodes} complete!")
+        agent.save("./model/AIDS_agent/agent_1")
+
+    # --- Step 6: Test ---
+    y_pred = np.argmax(agent.model.predict(X_test, verbose=0), axis=1)
+    report = classification_report(y_test, y_pred, output_dict=True)
+    print(report)
+
+    num_to_label = {0: "Normal", 1: "Attack"}
+    report_converted = {}
+    for key, value in report.items():
+        try:
+            int_key = int(key)
+            new_key = num_to_label[int_key]
+        except:
+            new_key = key
+        report_converted[new_key] = value
+
+    # 儲存 CSV
+    rows = []
+    for cls, metrics in report_converted.items():
+        if isinstance(metrics, dict):
+            rows.append({
+                "class": cls,
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1-score": metrics["f1-score"],
+                "support": int(metrics["support"])
+            })
+        else:
+            rows.append({
+                "class": cls,
+                "precision": "",
+                "recall": "",
+                "f1-score": "",
+                "support": metrics
+            })
+
+    df_report = pd.DataFrame(rows)
+    df_report.to_csv("./results/AIDS_2.csv", index=False, encoding="utf-8-sig")
+    print("CSV 已儲存為 ./results/AIDS_2.csv")
+    print(df_report)
+
+    return df_report
 
 
 
@@ -257,3 +345,7 @@ def only_predict(
 # df = pd.read_csv("./inter_data/selected_feat_0.csv")
 # # --- Step 1: Convert attack categories to binary labels ---
 # df['attack_cat'] = df['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
+
+if __name__ == "__main__":
+    df = pd.read_csv("./inter_data/selected_feat_0.csv")
+    anomaly_detection_use_dos(df)
