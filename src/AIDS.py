@@ -139,7 +139,7 @@ def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_s
     
     # --- Step 4: Test ---
     y_pred = np.argmax(agent.model.predict(X_test, verbose=0), axis=1)
-    report = classification_report(y_test, y_pred)
+    report = classification_report(y_test, y_pred, output_dict=True)
     print(report)
 
     num_to_label = {
@@ -183,7 +183,7 @@ def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_s
     print("CSV 已儲存為 ./results/AIDS_1.csv")
     print(df_report)
 
-    return df_report
+    return df_report, y_pred
 
 
 # --- Step 2: Train/test split ---

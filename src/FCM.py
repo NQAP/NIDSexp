@@ -38,7 +38,7 @@ def fcm_downsample_majority(
         X, c=n_clusters, m=m, error=0.005, maxiter=1025, init=None
     )
     cluster_labels = np.argmax(u, axis=0)
-    df_majority = df_majority.copy()
+    df_majority = df_majority.copy().reset_index(drop=True)
     df_majority["ClusterLabel"] = cluster_labels
 
     # 3. 高隸屬度抽樣函數
