@@ -99,7 +99,7 @@ def train_gamo_pipeline(
 
     ce_none = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
 
-    epochs_pretrain_M = 0
+    epochs_pretrain_M = 50
     target_samples = 10000
     num_samples_class = np.array([137, 1220, 1847, 2151, 11122, 13098, 19459, 35607])
     oversample_times = np.ceil(target_samples / num_samples_class).astype(int)
@@ -214,7 +214,7 @@ def train_gamo_pipeline(
     # ---------------- Pretrain D ----------------
     # （同樣保留 pretrain D 的流程）
 
-    epochs_pretrain_D = 0
+    epochs_pretrain_D = 5
 
     # 先取得少數類 id
     minor_class_ids = [i for i in range(c)]
@@ -329,7 +329,7 @@ def train_gamo_pipeline(
         return new_P_i_dict
     
 
-    warmup_epochs_MG = 0
+    warmup_epochs_MG = 50
     batch_size_warmup = 512
     feat_layer = mlp.layers[-2]
 

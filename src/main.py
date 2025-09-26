@@ -33,9 +33,9 @@ if __name__ == "__main__":
     print("X.shape:", X.shape)
     Y = df_minority[target_column]
 
-    # df_minority_train, df_minority_test = train_test_split(df_minority, test_size=0.2, random_state=42)
+    df_minority_train, df_minority_test = train_test_split(df_minority, test_size=0.2, random_state=42)
 
-    # mlp, dis, gen = train_gamo_pipeline(df_train=df_minority_train, df_test=df_minority_test)
+    mlp, dis, gen = train_gamo_pipeline(df_train=df_minority_train, df_test=df_minority_test)
 
     # Generate by GAMO
 
@@ -64,17 +64,17 @@ if __name__ == "__main__":
     feature_names = df_minority.drop(columns=["attack_cat"]).columns.tolist()
 
     # 批量生成
-    # df_minority_balanced = generate_all_classes(
-    #     gen=gen,
-    #     num_gen_dict=num_gen_dict,
-    #     latDim=32,
-    #     feature_dim=42,
-    #     feature_names=feature_names,
-    #     c=8,
-    #     label_mapping=label_mapping,
-    #     original_df=df_minority,
-    #     save_path="./inter_data/balanced_minority.csv"        
-    # )
+    df_minority_balanced = generate_all_classes(
+        gen=gen,
+        num_gen_dict=num_gen_dict,
+        latDim=32,
+        feature_dim=42,
+        feature_names=feature_names,
+        c=8,
+        label_mapping=label_mapping,
+        original_df=df_minority,
+        save_path="./inter_data/balanced_minority.csv"        
+    )
 
     target_dict = {
         "Normal": 80912,
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     # df_majority = pd.read_csv("./inter_data/majority_class.csv")
 
-    df_minority_balanced = pd.read_csv("./inter_data/balanced_minority.csv")
+    # df_minority_balanced = pd.read_csv("./inter_data/balanced_minority.csv")
 
     target_column = "attack_cat"
 
