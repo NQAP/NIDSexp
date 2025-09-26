@@ -189,15 +189,17 @@ def anomaly_detection_pipeline_binary(df, sample_size=20000, episodes=3, batch_s
 # --- Step 2: Train/test split ---
 def only_predict(
     df,
-    model_path = "./model/AIDS_agent/agent_0"
+    model_path = "./model/AIDS_agent/agent_1"
 ):
     df_test = df.copy()
+    df_test.info()
     df_test['attack_cat'] = df_test['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
     
     # --- Step 2: Train/test split ---
     X_test = df_test.drop(columns=['attack_cat']).values
     y_test = df_test['attack_cat'].values
     state_dim = X_test.shape[1]
+    print(state_dim)
     action_dim = 2  # Normal / Attack
     agent = DoubleDQNAgent(state_dim, action_dim)
     agent.load(model_path)

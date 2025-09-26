@@ -69,7 +69,7 @@ def generate_final_reports(SIDS_pred, df_test, df_norm_pred, df_pred_non_norm, A
         y_true_multiclass, final_pred_multiclass, output_dict=True
     )
     df_report_multiclass = pd.DataFrame(report_multiclass_dict).transpose()
-    df_report_multiclass.to_csv("./results/final_multiclass_report.csv", encoding="utf-8-sig")
+    df_report_multiclass.to_csv("./results/final_multiclass_report_Normal_DoS.csv", encoding="utf-8-sig")
     print("多分類報告 CSV 已儲存: ./results/final_multiclass_report.csv")
 
     # --------- 二分類報告 ---------
@@ -80,7 +80,7 @@ def generate_final_reports(SIDS_pred, df_test, df_norm_pred, df_pred_non_norm, A
         y_true_binary, final_pred_binary, target_names=["Normal","Attack"], output_dict=True
     )
     df_report_binary = pd.DataFrame(report_binary_dict).transpose()
-    df_report_binary.to_csv("./results/final_binary_report.csv", encoding="utf-8-sig")
+    df_report_binary.to_csv("./results/final_binary_report_Normal_DoS.csv", encoding="utf-8-sig")
     print("二分類報告 CSV 已儲存: ./results/final_binary_report.csv")
 
     # --------- Accuracy ---------
@@ -91,7 +91,7 @@ def generate_final_reports(SIDS_pred, df_test, df_norm_pred, df_pred_non_norm, A
         "Metric": ["Multiclass Accuracy", "Binary Accuracy"],
         "Value": [accuracy_multiclass, accuracy_binary]
     })
-    df_accuracy.to_csv("./results/final_accuracy.csv", index=False, encoding="utf-8-sig")
+    df_accuracy.to_csv("./results/final_accuracy_Normal_DoS.csv", index=False, encoding="utf-8-sig")
     print("Accuracy CSV 已儲存: ./results/final_accuracy.csv")
 
     return final_pred_multiclass, final_pred_binary
