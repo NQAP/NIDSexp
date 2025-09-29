@@ -112,11 +112,10 @@ def modified_init_of_pop(train_data, pop_size, dim, iter=50):
 # -----------------------------
 # Modified GWO with Improved Initialization
 # -----------------------------
-def mGWO(X, y, pop_size=10, max_iter=5):
+def mGWO(X, y, target_column, pop_size=10, max_iter=5):
     num_features = X.shape[1]
     le = LabelEncoder()
     y = le.fit_transform(y)
-    target_column = "attack_cat"
     encoding_maps = {cls: int(code) for cls, code in zip(le.classes_, le.transform(le.classes_))}
     print(f"\n欄位 {target_column} 的對應關係： {encoding_maps}")
     with open("./extra_dataset/GWO_label_encodings.json", "w", encoding="utf-8") as f:

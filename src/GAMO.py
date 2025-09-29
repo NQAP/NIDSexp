@@ -17,11 +17,11 @@ def get_optimizer(lr=5e-4):
 def train_gamo_pipeline(
     df_train,
     df_test,
-    save_dir="./model/Gamo_pretrained_FCA",
-    cfmu_model_path="./model/cfmu_model/pretrained_cfmu_label_guided.h5",
+    save_dir="./model/FCA/Gamo_pretrained",
+    cfmu_model_path="./model/FCA/cfmu_model/pretrained_cfmu_label_guided.h5",
     latDim=32,
     batchSize=512,
-    max_step=5000,
+    max_step=1000,
     resSamplePd=100,
     modelSamplePd=500,
     epochs_pretrain_M=20,
@@ -99,7 +99,7 @@ def train_gamo_pipeline(
 
     ce_none = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
 
-    epochs_pretrain_M = 50
+    epochs_pretrain_M = 0
     target_samples = 10000
     num_samples_class = np.array([137, 1220, 1847, 2151, 11122, 13098, 19459, 35607])
     oversample_times = np.ceil(target_samples / num_samples_class).astype(int)
@@ -214,7 +214,7 @@ def train_gamo_pipeline(
     # ---------------- Pretrain D ----------------
     # （同樣保留 pretrain D 的流程）
 
-    epochs_pretrain_D = 5
+    epochs_pretrain_D = 0
 
     # 先取得少數類 id
     minor_class_ids = [i for i in range(c)]
@@ -329,7 +329,7 @@ def train_gamo_pipeline(
         return new_P_i_dict
     
 
-    warmup_epochs_MG = 50
+    warmup_epochs_MG = 0
     batch_size_warmup = 512
     feat_layer = mlp.layers[-2]
 

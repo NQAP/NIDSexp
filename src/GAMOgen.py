@@ -23,7 +23,7 @@ def build_cfmu(noise_dim=32, label_dim=8):
     gamoGen.summary()
     return Model([noise, labels], x, name="CFMU")
 
-def load_models(num_classes, dataMinor, gen_prefix="./UBSW_NB15_Gamo_Ver3/gamo_models_3500/GenForClass_", gen_postfix="_3500_Model"):
+def load_models(num_classes, dataMinor, gen_prefix="./model/FCA/Gamo_pretrained/gamo_models_1000/Gen", gen_postfix="__Model"):
     """
     載入所有生成器和 cfmu_gen
     """
@@ -42,6 +42,7 @@ def generate_samples_per_class(gen, cfmu_gen, num_samples, latDim, feature_dim, 
     """
     if num_samples <= 0:
         return np.empty((0, feature_dim)), np.empty((0,), dtype=int)
+    
 
     randNoise = np.random.normal(0, 1, (num_samples, latDim))
     fakeLabel = np.zeros((num_samples, c))
@@ -51,18 +52,21 @@ def generate_samples_per_class(gen, cfmu_gen, num_samples, latDim, feature_dim, 
     return fakePoints, np.full((num_samples,), target_class)
 
 
-def generate_all_classes(gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, original_df=None, save_path="./extra_dataset/generated_data.csv"):
+def generate_all_classes(target_column, gen, num_gen_dict, latDim, feature_dim, feature_names, c, label_mapping=None, original_df=None, save_path="./extra_dataset/generated_data.csv"):
     """
     批量生成所有類別的樣本，並存成 CSV
     num_gen_dict: dict 或 list，key=class id, value=生成數量
                   例如 {0:500, 1:200, 2:300}
     """
-    cfmu_model_path="./model/cfmu_model/pretrained_cfmu_label_guided.h5"
+    cfmu_model_path="./model/FCA/cfmu_model/pretrained_cfmu_label_guided.h5"
     cfmu_gen = load_model(cfmu_model_path, custom_objects={"SelfAttention": SelfAttention})
     cfmu_gen.trainable = False
 
     all_data = []
     all_labels = []
+
+    if gen is None:
+        gen = load_models(num_classes=c-1, dataMinor=original_df)
 
     for cls in range(c-1):
         num_samples = num_gen_dict.get(cls, 0) if isinstance(num_gen_dict, dict) else num_gen_dict[cls]
@@ -86,7 +90,7 @@ def generate_all_classes(gen, num_gen_dict, latDim, feature_dim, feature_names, 
     df = pd.DataFrame(all_data, columns=feature_names)
 
     df = pd.DataFrame(all_data, columns=feature_names)
-    df["attack_cat"] = all_labels
+    df[target_column] = all_labels
     if original_df is not None:
         df_final = pd.concat([original_df, df], ignore_index=True)
     else:

@@ -58,7 +58,7 @@ class SelfAttention(Layer):
 #         config.update({"units": self.units})
 #         return config
     
-def build_cfmu(noise_dim=32, label_dim=8):
+def build_cfmu(noise_dim=32, label_dim=5):
     noise=Input(shape=(noise_dim,))
     labels=Input(shape=(label_dim,))
     gamoGenInput=Concatenate()([noise, labels])
@@ -159,7 +159,7 @@ def denseGamoGenCreate(input_dim, numMinor, dataMinor):
     x = Dense(numMinor)(x)
     # print(x.shape)
     # print(x.shape)
-    x = RepeatVector(42)(x)
+    x = RepeatVector(49)(x)
     # 最後用自訂 Layer 處理 dataMinor（可以像之前的 GenProcessFinal）
     x = GenProcessFinal(dataMinor)(x)
 
@@ -200,13 +200,13 @@ def denseGamoGenCreate(input_dim, numMinor, dataMinor):
 # 	return genProcess
 
 def denseDisCreate():
-    imIn=Input(shape=(42,))
-    labels=Input(shape=(8,))
+    imIn=Input(shape=(49,))
+    labels=Input(shape=(5,))
     disInput=Concatenate()([imIn, labels])
 
-    x=Dense(42, activation="softmax")(disInput)
+    x=Dense(49, activation="softmax")(disInput)
 
-    x=SelfAttention(42)(x)
+    x=SelfAttention(49)(x)
 
     x=Dense(64)(x)
     x=LeakyReLU(alpha=0.1)(x)
@@ -222,11 +222,11 @@ def denseDisCreate():
 
 def denseMlpCreate():
 
-    imIn=Input(shape=(42,))
+    imIn=Input(shape=(49,))
 
-    x=Dense(42, activation="softmax")(imIn)
+    x=Dense(49, activation="softmax")(imIn)
 
-    x=SelfAttention(42)(x)
+    x=SelfAttention(49)(x)
 
     x=Dense(64)(x)
     x=LeakyReLU(alpha=0.1)(x)
@@ -234,7 +234,7 @@ def denseMlpCreate():
     x=Dense(32)(x)
     x=LeakyReLU(alpha=0.1)(x)
 
-    mlpFinal=Dense(8, activation='softmax')(x)
+    mlpFinal=Dense(5, activation='softmax')(x)
 
     mlp=Model(imIn, mlpFinal)
     mlp.summary()

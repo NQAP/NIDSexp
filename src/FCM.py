@@ -53,8 +53,8 @@ def fcm_downsample_majority(
         return df_sub.loc[chosen_idx]
 
     # 4. 在每個 target value 內依 cluster 下採樣
+    df_downsampled = []
     if target_dict is not None:
-        df_downsampled = []
         for target_value, target_count in target_dict.items():
             df_sub = df_majority[df_majority[target_column] == target_value]
             total_sub = len(df_sub)
@@ -78,7 +78,7 @@ def fcm_downsample_majority(
 
             for cluster_id, group in df_sub.groupby("ClusterLabel"):
                 # 假設我們保留 cluster 的 50%
-                n_keep = int(np.round(len(group) * 0.9))
+                n_keep = int(np.round(len(group) * 0.7))
 
                 if n_keep >= len(group):
                     df_downsampled.append(group)

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import json
 
-from combine_train_test import merge_csv
+# from combine_train_test import merge_csv
 from preprocessing import preprocessing
 from GAMO import train_gamo_pipeline
 from FCM import fcm_downsample_majority
@@ -17,7 +17,7 @@ import os
 
 if __name__ == "__main__":
     
-    merge_csv("./origin_dataset/UNSW_NB15_training-set.csv", "./origin_dataset/UNSW_NB15_testing-set.csv", output="./inter_data/combined.csv")
+    # merge_csv("./origin_dataset/UNSW_NB15_training-set.csv", "./origin_dataset/UNSW_NB15_testing-set.csv", output="./FCA/combined.csv")
 
     # Standardscaling for numeric column, MinMaxScaling for categorical column
 
@@ -35,16 +35,19 @@ if __name__ == "__main__":
 
     df_minority_train, df_minority_test = train_test_split(df_minority, test_size=0.2, random_state=42)
 
-    mlp, dis, gen = train_gamo_pipeline(df_train=df_minority_train, df_test=df_minority_test)
+    # mlp, dis, gen = train_gamo_pipeline(df_train=df_minority_train, df_test=df_minority_test)
 
     # Generate by GAMO
     with open("./extra_dataset/minor_label_encodings.json", "r", encoding="utf-8") as f:
         label_mapping = json.load(f)
 
     label_mapping = {int(k): v for k, v in label_mapping.items()}
+    inverse_mapping = {v: k for k,v in label_mapping.items()}
+
+    df_minority["Label_encoded"] = df_minority[target_column].map(inverse_mapping)
 
     # Step 1: 計算每個 label 的數量
-    label_counts = df_minority[target_column].value_counts()
+    label_counts = df_minority["Label_encoded"].value_counts()
 
     # Step 2: 找出最大值
     max_count = label_counts.max()
@@ -54,27 +57,30 @@ if __name__ == "__main__":
     
     print(num_gen_dict)
 
+    df_minority = df_minority.drop(columns=["Label_encoded"])
+
     feature_names = df_minority.drop(columns=[target_column]).columns.tolist()
 
 
     # 批量生成
     df_minority_balanced = generate_all_classes(
-        gen=gen,
+        target_column=target_column,
+        gen=None,
         num_gen_dict=num_gen_dict,
         latDim=32,
-        feature_dim=42,
+        feature_dim=49,
         feature_names=feature_names,
-        c=8,
+        c=5,
         label_mapping=label_mapping,
         original_df=df_minority,
-        save_path="./inter_data/balanced_minority.csv"        
+        save_path="./FCA/balanced_minority.csv"        
     )
 
     # # FCM
 
-    # # df_majority = pd.read_csv("./inter_data/majority_class.csv")
+    # # df_majority = pd.read_csv("./FCA/majority_class.csv")
 
-    # # df_minority_balanced = pd.read_csv("./inter_data/balanced_minority.csv")
+    # # df_minority_balanced = pd.read_csv("./FCA/balanced_minority.csv")
 
     # target_column = "attack_cat"
 
@@ -83,49 +89,59 @@ if __name__ == "__main__":
     #     "Generic": 31204
     # }
 
-    # df_majority_after_FCM = fcm_downsample_majority(
-    #     df_majority=df_majority,
-    #     target_column=target_column,
-    #     target_dict=target_dict,
-    #     n_clusters=166,
-    #     m=1.013,
-    #     random_state=42
-    # )
+    df_majority_after_FCM = fcm_downsample_majority(
+        df_majority=df_majority,
+        target_column=target_column,
+        target_dict=None,
+        n_clusters=166,
+        m=1.013,
+        random_state=42
+    )
 
-    # df_majority_after_FCM.to_csv("./inter_data/FCM_0.csv")
+    df_majority_after_FCM.to_csv("./FCA/FCM_0.csv")
 
     # # 移除 ID 欄位（不分大小寫）
-    # for df in [df_majority_after_FCM, df_minority_balanced]:
-    #     for col in df.columns:
-    #         if col.lower() == "id":
-    #             df.drop(columns=[col], inplace=True)
+    for df in [df_majority_after_FCM, df_minority_balanced]:
+        for col in df.columns:
+            if col.lower() == "id":
+                df.drop(columns=[col], inplace=True)
 
     # # 合併
-    # df_concated = pd.concat([df_majority_after_FCM, df_minority_balanced], axis=0, ignore_index=True)
-    # df_concated.to_csv("./inter_data/concated_0.csv")
+    df_concated = pd.concat([df_majority_after_FCM, df_minority_balanced], axis=0, ignore_index=True)
+    df_concated.to_csv("./FCA/concated_0.csv")
+    df_concated[target_column] = df_concated[target_column].astype(str)
+    df_concated.info()
+    X = df_concated.drop(columns=target_column)
+    y = df_concated[target_column]
 
-    # # 生成一個假資料集
-    # target_column = "attack_cat"
-    # X = df_concated.drop(columns=target_column)
-    # y = df_concated[target_column]
+    best_feature = mGWO(X, y, target_column=target_column, pop_size=20, max_iter=86)
 
-    # best_feature = mGWO(X, y, pop_size=20, max_iter=86)
-
-    # selected_idx = np.where(best_feature == 1)[0]
+    selected_idx = np.where(best_feature == 1)[0]
 
     # # 取得選取的特徵欄位名稱
-    # selected_columns = df_concated.drop(columns=target_column).columns[selected_idx]
+    selected_columns = df_concated.drop(columns=target_column).columns[selected_idx]
 
     # # 將 df_concated 篩選成只包含選取的特徵 + target
-    # df_selected = df_concated[selected_columns.tolist() + [target_column]]
+    df_selected = df_concated[selected_columns.tolist() + [target_column]]
 
-    # df_selected.to_csv("./inter_data/selected_feat_0.csv", index=False)
+    df_selected.to_csv("./FCA/selected_feat_0.csv", index=False)
 
     # # 查看結果
-    # print("Selected columns + target:")
-    # print(df_selected.head())
+    print("Selected columns + target:")
+    print(df_selected.head())
 
-    # df_selected = pd.read_csv("./inter_data/selected_feat_0.csv")
+    # df_selected = pd.read_csv("./FCA/selected_feat_0.csv")
+
+    hydra_FCA = pd.read_csv("./FCA_DATASET/Test/hydra_FCA.csv")
+    hydra_noFCA = pd.read_csv("./FCA_DATASET/Test/hydra_noFCA.csv")
+    nikto_FCA = pd.read_csv("./FCA_DATASET/Test/nikto_FCA.csv")
+    nikto_noFCA = pd.read_csv("./FCA_DATASET/Test/nikto_noFCA.csv")
+    nmap_FCA = pd.read_csv("./FCA_DATASET/Test/nmap_FCA.csv")
+    nmap_noFCA = pd.read_csv("./FCA_DATASET/Test/nmap_noFCA.csv")
+    sqlmap_FCA = pd.read_csv("./FCA_DATASET/Test/sqlmap_FCA.csv")
+    sqlmap_noFCA = pd.read_csv("./FCA_DATASET/Test/sqlmap_noFCA.csv")
+    xss_FCA = pd.read_csv("./FCA_DATASET/Test/xss_FCA.csv")
+    xss_noFCA = pd.read_csv("./FCA_DATASET/Test/xss_noFCA.csv")
 
     # # df_concated = pd.concat([df_majority, df_minority], axis=0, ignore_index=True)
 
