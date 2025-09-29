@@ -5,7 +5,7 @@ import skfuzzy as fuzz
 def fcm_downsample_majority(
     df_majority,
     target_column,
-    target_dict,
+    target_dict=None,
     n_clusters=166,
     m=1.013,
     output_path=None,
@@ -53,23 +53,37 @@ def fcm_downsample_majority(
         return df_sub.loc[chosen_idx]
 
     # 4. 在每個 target value 內依 cluster 下採樣
-    df_downsampled = []
-    for target_value, target_count in target_dict.items():
-        df_sub = df_majority[df_majority[target_column] == target_value]
-        total_sub = len(df_sub)
-        cluster_sizes = df_sub.groupby("ClusterLabel").size()
+    if target_dict is not None:
+        df_downsampled = []
+        for target_value, target_count in target_dict.items():
+            df_sub = df_majority[df_majority[target_column] == target_value]
+            total_sub = len(df_sub)
+            cluster_sizes = df_sub.groupby("ClusterLabel").size()
 
-        num_target_per_cluster = {
-            cluster_id: int(np.round(size / total_sub * target_count))
-            for cluster_id, size in cluster_sizes.items()
-        }
+            num_target_per_cluster = {
+                cluster_id: int(np.round(size / total_sub * target_count))
+                for cluster_id, size in cluster_sizes.items()
+            }
 
-        for cluster_id, group in df_sub.groupby("ClusterLabel"):
-            n_keep = num_target_per_cluster[cluster_id]
-            if n_keep >= len(group):
-                df_downsampled.append(group)
-            else:
-                df_downsampled.append(membership_weighted_sampling(group, cluster_id, n_keep, u))
+            for cluster_id, group in df_sub.groupby("ClusterLabel"):
+                n_keep = num_target_per_cluster[cluster_id]
+                if n_keep >= len(group):
+                    df_downsampled.append(group)
+                else:
+                    df_downsampled.append(membership_weighted_sampling(group, cluster_id, n_keep, u))
+    else:
+        for target_value, df_sub in df_majority.groupby(target_column):
+            total_sub = len(df_sub)
+            cluster_sizes = df_sub.groupby("ClusterLabel").size()
+
+            for cluster_id, group in df_sub.groupby("ClusterLabel"):
+                # 假設我們保留 cluster 的 50%
+                n_keep = int(np.round(len(group) * 0.9))
+
+                if n_keep >= len(group):
+                    df_downsampled.append(group)
+                else:
+                    df_downsampled.append(membership_weighted_sampling(group, cluster_id, n_keep, u))
 
     # 5. 合併並清理
     df_final = pd.concat(df_downsampled).reset_index(drop=True)

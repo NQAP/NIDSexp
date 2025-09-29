@@ -21,14 +21,11 @@ if __name__ == "__main__":
     # Standardscaling for numeric column, MinMaxScaling for categorical column
 
     df = pd.read_csv("./inter_data/combined.csv")
-    # df_train = pd.read_csv("./origin_dataset/UNSW_NB15_training-set.csv")
-    # df_test = pd.read_csv("./origin_dataset/UNSW_NB15_testing-set.csv")
+    target_column = "attack_cat"
 
-    df_majority, df_minority = preprocessing(df)
+    df_majority, df_minority = preprocessing(df, target_column=target_column)
 
     # Train GAMO generator
-
-    target_column = "attack_cat"
     X = df_minority.drop(columns=[target_column])
     print("X.shape:", X.shape)
     Y = df_minority[target_column]
@@ -38,6 +35,8 @@ if __name__ == "__main__":
     mlp, dis, gen = train_gamo_pipeline(df_train=df_minority_train, df_test=df_minority_test)
 
     # Generate by GAMO
+
+
 
     num_gen_dict = {
         0: 33263,

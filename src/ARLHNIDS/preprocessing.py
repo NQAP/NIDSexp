@@ -3,17 +3,21 @@ import argparse
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import json
 
-def preprocessing(df):
+def preprocessing(df, target_column):
     """
-    drop ID and label columns
+    drop ID columns
     """
-
-    df = df.drop(columns=['ID', 'label'])
+    for col in df.columns:
+        if col.lower() == "id":
+            df.drop(columns=[col], inplace=True)
+    
+    df[target_column] = df[target_column].apply(lambda x: 0 if x == '0' else x)
 
     """
     Original numeric data features scaling with standardscalar
     """
-
+    df.info()
+    print(df[df[target_column] != 0])
     # 標準化 X 的數值欄位
     numeric_cols = df.select_dtypes(include='number').columns
     scaler = StandardScaler()
@@ -22,8 +26,6 @@ def preprocessing(df):
     """
     label encoding
     """
-
-    target_column = "attack_cat"
 
     X = df.drop(columns=[target_column])
     Y = df[target_column]
@@ -53,8 +55,9 @@ def preprocessing(df):
     """
     Min Max scaling for non original numeric feature
     """
-    scaler = MinMaxScaler(feature_range=(0,1)).fit(df[categorical_cols])
-    df[categorical_cols] = scaler.fit_transform(df[categorical_cols])
+    if len(categorical_cols) != 0:
+        scaler = MinMaxScaler(feature_range=(0,1)).fit(df[categorical_cols])
+        df[categorical_cols] = scaler.fit_transform(df[categorical_cols])
 
     """
     Clamping extreme value

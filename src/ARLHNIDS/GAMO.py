@@ -17,7 +17,7 @@ def get_optimizer(lr=5e-4):
 def train_gamo_pipeline(
     df_train,
     df_test,
-    save_dir="./model/Gamo_pretrained",
+    save_dir="./model/Gamo_pretrained_FCA",
     cfmu_model_path="./model/cfmu_model/pretrained_cfmu_label_guided.h5",
     latDim=32,
     batchSize=512,
