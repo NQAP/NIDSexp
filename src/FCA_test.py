@@ -5,13 +5,13 @@ import pandas as pd
 import json
 
 # from combine_train_test import merge_csv
-from preprocessing import preprocessing
+from preprocessing import preprocessing, major_minor_sep
 from GAMO import train_gamo_pipeline
 from FCM import fcm_downsample_majority
 from GAMOgen import generate_all_classes
 from mGWO import mGWO
-from SIDS import SIDS_pipeline
-from AIDS import anomaly_detection_pipeline_binary, only_predict
+from SIDS import SIDS_pipeline, test_SIDS_model
+from AIDS import anomaly_detection_pipeline_binary, AIDS_predict
 from gen_report import generate_final_reports
 import os
 
@@ -23,8 +23,8 @@ if __name__ == "__main__":
 
     df = pd.read_csv("./FCA_DATASET/Train/Train_multiple.csv")
     target_column = "Label"
-
-    df_majority, df_minority = preprocessing(df, target_column=target_column)
+    df, std_scaler = preprocessing(df, target_column=target_column)
+    df_majority, df_minority = major_minor_sep(df=df, target_column=target_column)
 
     # Train GAMO generator
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         random_state=42
     )
 
-    df_majority_after_FCM.to_csv("./FCA/FCM_0.csv")
+    df_majority_after_FCM.to_csv("./FCA/FCM_0.csv", index=False)
 
     # # 移除 ID 欄位（不分大小寫）
     for df in [df_majority_after_FCM, df_minority_balanced]:
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     # # 合併
     df_concated = pd.concat([df_majority_after_FCM, df_minority_balanced], axis=0, ignore_index=True)
-    df_concated.to_csv("./FCA/concated_0.csv")
+    df_concated.to_csv("./FCA/concated_0.csv", index=False)
     df_concated[target_column] = df_concated[target_column].astype(str)
     df_concated.info()
     X = df_concated.drop(columns=target_column)
@@ -132,51 +132,27 @@ if __name__ == "__main__":
 
     # df_selected = pd.read_csv("./FCA/selected_feat_0.csv")
 
+    encoding_mapping = {
+        "Normal": 0,
+        "Nikto": 1,
+        "Nmap": 2,
+        "Hydra": 3,
+        "SQLi": 4,
+        "XSS": 5
+    }
+
+    # SIDS/AIDS Training
+    voting_model = SIDS_pipeline(df_train=df_selected, target_column=target_column, encoding_mapping=encoding_mapping)
+    agent = anomaly_detection_pipeline_binary(df=df_selected, target_column=target_column)
+
     hydra_FCA = pd.read_csv("./FCA_DATASET/Test/hydra_FCA.csv")
     hydra_noFCA = pd.read_csv("./FCA_DATASET/Test/hydra_noFCA.csv")
-    nikto_FCA = pd.read_csv("./FCA_DATASET/Test/nikto_FCA.csv")
-    nikto_noFCA = pd.read_csv("./FCA_DATASET/Test/nikto_noFCA.csv")
-    nmap_FCA = pd.read_csv("./FCA_DATASET/Test/nmap_FCA.csv")
-    nmap_noFCA = pd.read_csv("./FCA_DATASET/Test/nmap_noFCA.csv")
-    sqlmap_FCA = pd.read_csv("./FCA_DATASET/Test/sqlmap_FCA.csv")
-    sqlmap_noFCA = pd.read_csv("./FCA_DATASET/Test/sqlmap_noFCA.csv")
-    xss_FCA = pd.read_csv("./FCA_DATASET/Test/xss_FCA.csv")
-    xss_noFCA = pd.read_csv("./FCA_DATASET/Test/xss_noFCA.csv")
 
-    # # df_concated = pd.concat([df_majority, df_minority], axis=0, ignore_index=True)
+    hydra_FCA[target_column] = hydra_FCA[target_column].apply(lambda x: "Normal" if (x == 0 or x == '0') else "Hydra")
+    hydra_noFCA[target_column] = hydra_noFCA[target_column].apply(lambda x: "Normal" if (x == 0 or x == '0') else "Hydra")
 
-    # df_train, df_test = train_test_split(df_selected, test_size=0.2, random_state=42)
+    hydra_FCA = preprocessing(hydra_FCA, target_column, std_scaler)
+    hydra_noFCA = preprocessing(hydra_noFCA, target_column, std_scaler)
 
-    # df_SIDS_report, SIDS_pred, df_norm_pred, df_pred_non_norm = SIDS_pipeline(df_train=df_train, df_test=df_test, n_trials=10)
-
-    # report, AIDS_pred = anomaly_detection_pipeline_binary(df_selected, episodes=5)
-
-    # # report, AIDS_pred = only_predict(df=df_norm_pred)
-
-    # print ("SIDS_pred = ", SIDS_pred)
-    # print ("AIDS_pred = ", AIDS_pred)
-
-    # direcPath=os.path.join("./results", "prediction")
-
-    # if not os.path.exists(direcPath):
-    #     os.makedirs(direcPath)
-
-    # resSave=os.path.join(direcPath, 'SIDS')
-    # np.savez(resSave, SIDS_pred=SIDS_pred)
-    # recordSave=os.path.join(direcPath, 'AIDS')
-    # np.savez(recordSave, AIDS_pred=AIDS_pred)
-
-    # df_norm_pred.to_csv("./results/prediction/normal.csv")
-    # df_pred_non_norm.to_csv("./results/prediction/non_normal.csv")
-
-    # data = np.load('./results/prediction/SIDS.npz')
-    # SIDS_pred = data['SIDS_pred']
-
-    # data = np.load('./results/prediction/AIDS.npz')
-    # AIDS_pred = data['AIDS_pred']
-
-    # df_norm_pred = pd.read_csv('./results/prediction/normal.csv')
-    # df_pred_non_norm = pd.read_csv('./results/prediction/non_normal.csv')
-
-
-    # final_pred_multiclass, final_pred_binary = generate_final_reports(SIDS_pred, df_test, df_norm_pred, df_pred_non_norm, AIDS_pred)
+    hydra_FCA = hydra_FCA[selected_columns.tolist() + [target_column]]
+    hydra_noFCA = hydra_noFCA[selected_columns.tolist() + [target_column]]

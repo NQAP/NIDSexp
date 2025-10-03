@@ -78,7 +78,7 @@ def fcm_downsample_majority(
 
             for cluster_id, group in df_sub.groupby("ClusterLabel"):
                 # 假設我們保留 cluster 的 50%
-                n_keep = int(np.round(len(group) * 0.7))
+                n_keep = int(np.round(len(group) * 0.8))
 
                 if n_keep >= len(group):
                     df_downsampled.append(group)

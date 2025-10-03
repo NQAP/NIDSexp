@@ -2,16 +2,21 @@ import pandas as pd
 import argparse
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 import json
+import re
 
-def preprocessing(df, target_column):
+def preprocessing(df, target_column, std_scaler=None):
     """
     drop ID columns
     """
+
+    df = df.rename(columns=lambda x: re.sub(r'[^A-Za-z0-9_]+', '_', x))
+
     for col in df.columns:
         if col.lower() == "id":
             df.drop(columns=[col], inplace=True)
     
     df[target_column] = df[target_column].apply(lambda x: 0 if x == '0' else x)
+    df[target_column] = df[target_column].apply(lambda x: "Normal" if (x == 0 or x == '0') else x)
 
     """
     Original numeric data features scaling with standardscalar
@@ -20,8 +25,11 @@ def preprocessing(df, target_column):
     print(df[df[target_column] != 0])
     # 標準化 X 的數值欄位
     numeric_cols = df.select_dtypes(include='number').columns
-    scaler = StandardScaler()
-    df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
+    if std_scaler is None:
+        scaler = StandardScaler()
+        df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
+    else:
+        df[numeric_cols] = std_scaler.transform(df[numeric_cols])
 
     """
     label encoding
@@ -74,10 +82,14 @@ def preprocessing(df, target_column):
             mask = (df[col] > 10 * median) | (df[col] > percentile_95)
             df.loc[mask, col] = percentile_95
 
-    """
-    Find majority and minority class
-    """
+    if std_scaler is None:
+        return df, scaler
+    else:
+        return df
 
+def major_minor_sep(df, target_column):
+    Y = df['Label']
+    # Y = df[target_column]
     counts = Y.value_counts()
     Major_class = []
     Minor_class = []
@@ -109,6 +121,7 @@ def preprocessing(df, target_column):
     print(df_minority[target_column].value_counts())
 
     return df_majority, df_minority
+
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="loading dataset file (.csv)")
