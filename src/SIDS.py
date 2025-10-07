@@ -110,7 +110,8 @@ class CustomVotingClassifier:
 # ================= 主程式 =================
 def SIDS_pipeline(df_train, target_column, encoding_mapping, n_trials=20, save_model=True):
 
-    df_train[target_column] = df_train[target_column].map(encoding_mapping)
+    if encoding_mapping is not None:
+        df_train[target_column] = df_train[target_column].map(encoding_mapping)
     X_train, y_train = df_train.drop(target_column, axis=1), df_train[target_column]
     X_train, X_val, y_train, y_val = train_test_split(
         X_train, y_train, test_size=0.2, random_state=42, stratify=y_train
@@ -238,7 +239,7 @@ def SIDS_pipeline(df_train, target_column, encoding_mapping, n_trials=20, save_m
             })
 
     df_report = pd.DataFrame(rows)
-    save_path = "./FCA/results/SIDS_val.csv"
+    save_path = "./FCA_1/results/SIDS_val.csv"
     df_report.to_csv(save_path, index=False, encoding="utf-8-sig")
     print(f"📊 測試報告已儲存於 {save_path}")
     print(df_report)
@@ -246,14 +247,14 @@ def SIDS_pipeline(df_train, target_column, encoding_mapping, n_trials=20, save_m
 
     # ---------------- 存檔 ----------------
     if save_model:
-        joblib.dump(voting_model, "./model/FCA/sids_voting_model.pkl")
-        print("✅ 投票模型已儲存為 ./model/FCA/sids_voting_model.pkl")
+        joblib.dump(voting_model, "./model/FCA_1/sids_voting_model.pkl")
+        print("✅ 投票模型已儲存為 ./model/FCA_1/sids_voting_model.pkl")
 
     return voting_model
 
 
     # ---------- 報告 ----------
-def test_SIDS_model(model, df_test, target_column, encoding_mapping=None, save_path="./FCA/results/SIDS_report.csv"):
+def test_SIDS_model(model, df_test, target_column, encoding_mapping=None, save_path="./FCA_1/results/SIDS_report.csv"):
     """
     model: 訓練好的模型
     df_test: 測試資料 DataFrame
@@ -266,9 +267,11 @@ def test_SIDS_model(model, df_test, target_column, encoding_mapping=None, save_p
     if encoding_mapping is not None:
         df_test[target_column] = df_test[target_column].map(encoding_mapping)
         normal_label = encoding_mapping.get("Normal")
-
+    else:
+        normal_label = 0
+        
     if model is None:
-        model = joblib.load("./model/FCA/sids_voting_model.pkl")
+        model = joblib.load("./model/FCA_1/sids_voting_model.pkl")
     
     X_test, y_test = df_test.drop(columns=[target_column]), df_test[target_column]
     print(y_test.value_counts())
@@ -318,17 +321,7 @@ def test_SIDS_model(model, df_test, target_column, encoding_mapping=None, save_p
     print(f"📊 測試報告已儲存於 {save_path}")
     print(df_report)
 
-    # --- Step 6: 取得被判定為 Normal 的資料 ---
-    normal_idx = np.where(y_pred == normal_label)[0]
-    non_normal_idx = np.where(y_pred != normal_label)[0]
-
-    df_pred_normal = df_test.iloc[normal_idx].copy()
-    df_pred_non_normal = df_test.iloc[non_normal_idx].copy()
-
-    print(f"✅ 被判定為 Normal 的資料數量: {len(df_pred_normal)}")
-    print(f"⚠️ 被判定為 非 Normal 的資料數量: {len(df_pred_non_normal)}")
-
-    return y_pred, df_pred_normal, df_pred_non_normal
+    return y_pred
 
 
 # =============== 測試用範例 (模擬資料集) ===============

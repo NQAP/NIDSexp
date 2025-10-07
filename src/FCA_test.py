@@ -156,3 +156,8 @@ if __name__ == "__main__":
 
     hydra_FCA = hydra_FCA[selected_columns.tolist() + [target_column]]
     hydra_noFCA = hydra_noFCA[selected_columns.tolist() + [target_column]]
+
+    hydra_noFCA_pred, hydra_noFCA_pred_normal, hydra_noFCA_pred_non_normal = test_SIDS_model(model=voting_model, df_test=hydra_noFCA, target_column=target_column, encoding_mapping=encoding_mapping)
+    print(hydra_noFCA_pred_normal[target_column].value_counts())
+    hydra_noFCA_pred_AIDS = AIDS_predict(hydra_noFCA, target_column)
+    generate_final_reports(encoding_mapping, target_column, hydra_noFCA, hydra_noFCA_pred_normal, hydra_noFCA_pred_non_normal, hydra_noFCA_pred, hydra_noFCA_pred_AIDS, saving_path="hydra_noFCA")

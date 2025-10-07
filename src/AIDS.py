@@ -102,7 +102,7 @@ class DoubleDQNAgent:
 # ------------------ Pipeline ------------------
 def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, episodes=3, batch_size=64):
     # --- Step 1: Convert attack categories to binary labels ---
-    df[target_column] = df[target_column].apply(lambda x: 0 if x == 'Normal' else 1)
+    df[target_column] = df[target_column].apply(lambda x: 1 if x != 0 else x)
     
     # --- Step 2: Train/test split ---
     X_train = df.drop(columns=[target_column]).values
@@ -134,8 +134,8 @@ def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, epis
             agent.replay()
         print(f"Epoch {epoch+1}/{episodes} complete!")
 
-    agent.save("./model/FCA/AIDS_agent/agent_0")
-    print("agent已儲存於./model/FCA/AIDS_agent/agent_0")
+    agent.save("./model/FCA_1/AIDS_agent/agent_0")
+    print("agent已儲存於./model/FCA_1/AIDS_agent/agent_0")
     return agent
 
 
@@ -143,11 +143,12 @@ def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, epis
 def AIDS_predict(
     df,
     target_column,
-    model_path = "./model/FCA/AIDS_agent/agent_0"
+    save_path=None,
+    model_path = "./model/FCA_1/AIDS_agent/agent_0"
 ):
     df_test = df.copy()
 
-    df_test[target_column] = df_test[target_column].apply(lambda x: 0 if x == 'Normal' else 1)
+    df_test[target_column] = df_test[target_column].apply(lambda x: 1 if x != 0 else x)
     
     # --- Step 2: Train/test split ---
 
@@ -200,7 +201,8 @@ def AIDS_predict(
             })
 
     df_report = pd.DataFrame(rows)
-    df_report.to_csv("./FCA/results/AIDS_report.csv", index=False, encoding="utf-8-sig")
-    print("CSV 已儲存為 ./FCA/results/AIDS_report.csv")
+    if save_path is not None:
+        df_report.to_csv(save_path, index=False, encoding="utf-8-sig")
+        print(f"CSV 已儲存為 {save_path}")
 
     return y_pred
