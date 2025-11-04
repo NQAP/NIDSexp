@@ -13,7 +13,7 @@ from tqdm import tqdm
 # ------------------ Double DQN Agent ------------------
 class DoubleDQNAgent:
     def __init__(self, state_dim, action_dim, gamma=0.99, lr=0.001, epsilon=1.0,
-                 epsilon_min=0.01, epsilon_decay=0.995, batch_size=64, memory_size=10000,
+                 epsilon_min=0.01, epsilon_decay=0.995, batch_size=256, memory_size=10000,
                  target_update_freq=10):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -100,7 +100,7 @@ class DoubleDQNAgent:
         self.train_step = int(state["train_step"])
 
 # ------------------ Pipeline ------------------
-def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, episodes=3, batch_size=64):
+def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, episodes=4, batch_size=256):
     # --- Step 1: Convert attack categories to binary labels ---
     df[target_column] = df[target_column].apply(lambda x: 1 if x != 0 else x)
     
@@ -109,10 +109,10 @@ def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, epis
     y_train = df[target_column].values
     
     # --- Optional: sample a subset for faster training ---
-    if sample_size < len(X_train):
-        idx = np.random.choice(len(X_train), sample_size, replace=False)
-        X_train = X_train[idx]
-        y_train = y_train[idx]
+    # if sample_size < len(X_train):
+    #     idx = np.random.choice(len(X_train), sample_size, replace=False)
+    #     X_train = X_train[idx]
+    #     y_train = y_train[idx]
     
     state_dim = X_train.shape[1]
     action_dim = 2  # Normal / Attack
@@ -121,17 +121,20 @@ def anomaly_detection_pipeline_binary(df, target_column, sample_size=20000, epis
     # --- Step 3: Train Double DQN ---
     for epoch in tqdm(range(episodes)):
         idxs = np.random.permutation(len(X_train))
-        for start in tqdm(range(0, len(X_train), 64)):
-            end = start + 64
+        step = 0
+        for start in tqdm(range(0, len(X_train), batch_size)):
+            end = start + batch_size
             batch_idx = idxs[start:end]
+            step = step + 1
             for i in batch_idx:
                 state = X_train[i]
                 action = agent.act(state)
                 reward = 1 if action == y_train[i] else -1
-                next_state = X_train[i+1] if i < len(X_train)-1 else np.zeros_like(state)
+                next_state = state
                 done = (i == len(X_train)-1)
                 agent.remember(state, action, reward, next_state, done)
-            agent.replay()
+            if step % 10 == 0 and step != 0:
+                agent.replay()
         print(f"Epoch {epoch+1}/{episodes} complete!")
 
     agent.save("./model/FCA_1/AIDS_agent/agent_0")

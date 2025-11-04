@@ -19,11 +19,11 @@ import os
 if __name__ == "__main__":
     
     target_column = "Label"
-    # df_selected = pd.read_parquet("./processed_fca_real/train_sampled.parquet")
+    df_selected = pd.read_parquet("./processed_fca_real/train_sampled.parquet")
 
     # SIDS/AIDS Training
     # voting_model = SIDS_pipeline(df_train=df_selected, target_column=target_column, encoding_mapping=None)
-    # agent = anomaly_detection_pipeline_binary(df=df_selected, target_column=target_column)
+    agent = anomaly_detection_pipeline_binary(df=df_selected, target_column=target_column)
     attacks = ['xss', 'nikto', 'hydra', 'nmap', 'sqlmap']
     types = ['FCA', 'noFCA']
     xss = []
